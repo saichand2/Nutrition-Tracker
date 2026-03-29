@@ -10,6 +10,21 @@ import {
 import type { Session, User } from "@supabase/supabase-js";
 import { getSupabase, isSupabaseConfigured } from "../lib/supabase";
 
+function normalizeAuthError(err: unknown): Error {
+  if (!(err instanceof Error)) return new Error(String(err));
+  const msg = err.message.toLowerCase();
+  const isNetworkish =
+    msg.includes("load failed") ||
+    msg.includes("failed to fetch") ||
+    msg.includes("networkerror") ||
+    msg.includes("network request failed") ||
+    msg === "fetch failed";
+  if (!isNetworkish) return err;
+  return new Error(
+    "Could not reach Supabase. Confirm VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set in Railway for the build (Vite bakes them in—change env then redeploy). In Supabase: Authentication → URL Configuration — add this site under Redirect URLs and set Site URL. Check the URL is https://… .supabase.co with no spaces."
+  );
+}
+
 type AuthContextValue = {
   isConfigured: boolean;
   loading: boolean;
@@ -52,14 +67,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!isConfigured) return { error: new Error("Supabase not configured") };
-    const { error } = await getSupabase().auth.signInWithPassword({ email, password });
-    return { error: error ?? null };
+    try {
+      const { error } = await getSupabase().auth.signInWithPassword({ email, password });
+      return { error: error ? normalizeAuthError(error) : null };
+    } catch (e) {
+      return { error: normalizeAuthError(e) };
+    }
   }, [isConfigured]);
 
   const signUp = useCallback(async (email: string, password: string) => {
     if (!isConfigured) return { error: new Error("Supabase not configured") };
-    const { error } = await getSupabase().auth.signUp({ email, password });
-    return { error: error ?? null };
+    try {
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const { error } = await getSupabase().auth.signUp({
+        email,
+        password,
+        options: origin ? { emailRedirectTo: `${origin}/` } : undefined,
+      });
+      return { error: error ? normalizeAuthError(error) : null };
+    } catch (e) {
+      return { error: normalizeAuthError(e) };
+    }
   }, [isConfigured]);
 
   const signOut = useCallback(async () => {
