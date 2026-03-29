@@ -9,6 +9,6 @@ export default defineConfig({
     host: "0.0.0.0",
     port: previewPort,
     strictPort: true,
-    allowedHosts: ["nutrition-tracker-production-ab71.up.railway.app"],
+    allowedHosts: ["gsc-nutrition-tracker.up.railway.app"],
   },
 });
