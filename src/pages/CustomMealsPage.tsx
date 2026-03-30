@@ -1,9 +1,116 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useTracker } from "../context/TrackerContext";
 import { MacroFields } from "../components/MacroFields";
 import type { BackupData, CustomMeal, MacroTotals } from "../types";
 import { emptyMacros } from "../types";
 import { hasAnyMacroValue, unrealisticMacroHints } from "../lib/validation";
+
+type AiNutritionResult = {
+  mealName: string;
+  nutrition: MacroTotals;
+};
+
+function normalizeMacro(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.round(n * 10) / 10);
+}
+
+function extractFirstJsonObject(raw: string): string | null {
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return null;
+  return raw.slice(start, end + 1);
+}
+
+function collectResponseText(payload: unknown): string {
+  if (!payload || typeof payload !== "object") return "";
+  const data = payload as {
+    output_text?: unknown;
+    output?: Array<{ content?: Array<{ text?: unknown; type?: unknown }> }>;
+  };
+
+  const parts: string[] = [];
+  if (typeof data.output_text === "string") {
+    parts.push(data.output_text);
+  }
+  if (Array.isArray(data.output)) {
+    for (const item of data.output) {
+      if (!item || !Array.isArray(item.content)) continue;
+      for (const contentItem of item.content) {
+        if (typeof contentItem?.text === "string") {
+          parts.push(contentItem.text);
+        }
+      }
+    }
+  }
+  return parts.join("\n").trim();
+}
+
+async function fetchAiNutritionEstimate(mealDescription: string): Promise<AiNutritionResult> {
+  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("AI is not configured. Add VITE_OPENAI_API_KEY to your .env file.");
+  }
+
+  const res = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "gpt-4.1-mini",
+      input: [
+        {
+          role: "system",
+          content:
+            "Estimate nutrition for a meal description. Return only one JSON object with keys: mealName, calories, protein, carbs, fat, fiber. No markdown.",
+        },
+        {
+          role: "user",
+          content: `Meal description: ${mealDescription}`,
+        },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error("AI request failed. Check API key and try again.");
+  }
+
+  const data = (await res.json()) as unknown;
+  const rawText = collectResponseText(data);
+  const jsonPayload = extractFirstJsonObject(rawText);
+  if (!jsonPayload) {
+    throw new Error("AI response could not be parsed. Try again.");
+  }
+
+  const parsed = JSON.parse(jsonPayload) as {
+    mealName?: unknown;
+    calories?: unknown;
+    protein?: unknown;
+    carbs?: unknown;
+    fat?: unknown;
+    fiber?: unknown;
+  };
+
+  const mealName =
+    typeof parsed.mealName === "string" && parsed.mealName.trim().length > 0
+      ? parsed.mealName.trim()
+      : mealDescription.trim().slice(0, 80) || "AI meal";
+
+  return {
+    mealName,
+    nutrition: {
+      calories: normalizeMacro(parsed.calories),
+      protein: normalizeMacro(parsed.protein),
+      carbs: normalizeMacro(parsed.carbs),
+      fat: normalizeMacro(parsed.fat),
+      fiber: normalizeMacro(parsed.fiber),
+    },
+  };
+}
 
 function toCsvRow(cols: Array<string | number>): string {
   return cols
@@ -53,6 +160,10 @@ export function CustomMealsPage() {
   });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [backupMessage, setBackupMessage] = useState<string>("");
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiMessage, setAiMessage] = useState("");
+  const [lastAiPrompt, setLastAiPrompt] = useState("");
 
   const resetForm = () => {
     setForm({ name: "", nutrition: emptyMacros() });
@@ -84,6 +195,30 @@ export function CustomMealsPage() {
     }
     resetForm();
   };
+
+  const runAiEstimate = useCallback(
+    async (description: string) => {
+      const prompt = description.trim();
+      if (!prompt) {
+        setAiMessage("Enter a meal description first.");
+        return;
+      }
+      setAiLoading(true);
+      setAiMessage("");
+      try {
+        const estimate = await fetchAiNutritionEstimate(prompt);
+        setForm({ name: estimate.mealName, nutrition: estimate.nutrition });
+        setLastAiPrompt(prompt);
+        setAiMessage("Nutrition facts loaded. Review and click Add meal to save.");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "AI estimate failed. Try again.";
+        setAiMessage(message);
+      } finally {
+        setAiLoading(false);
+      }
+    },
+    []
+  );
 
   const exportJson = () => {
     const data = getBackupData();
@@ -222,6 +357,44 @@ export function CustomMealsPage() {
           Save meals you eat often so you can add them quickly from the dashboard.
         </p>
       </header>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+        <h2 className="text-lg font-semibold text-slate-900">Get nutrition facts with AI</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Describe your meal (ingredients/portion). AI fills the form below so you can save to custom meals.
+        </p>
+        <div className="mt-4 space-y-3">
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium text-slate-600">Meal description</span>
+            <textarea
+              rows={3}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              placeholder="e.g. 2 eggs, 2 slices whole wheat toast, 1 tbsp butter"
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+            />
+          </label>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => void runAiEstimate(aiPrompt)}
+              disabled={aiLoading}
+              className="min-h-11 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white shadow hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
+            >
+              {aiLoading ? "Fetching..." : "Fetch with AI"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void runAiEstimate(lastAiPrompt || aiPrompt)}
+              disabled={aiLoading || (!lastAiPrompt && !aiPrompt.trim())}
+              className="min-h-11 rounded-lg border border-slate-200 px-4 py-2.5 font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+            >
+              Try again
+            </button>
+          </div>
+          {aiMessage && <p className="text-sm text-slate-600">{aiMessage}</p>}
+        </div>
+      </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
         <h2 className="text-lg font-semibold text-slate-900">

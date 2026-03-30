@@ -1,10 +1,11 @@
-import type { CustomMeal, LogEntry, NutritionGoals } from "../types";
+import type { CustomMeal, ExerciseLogEntry, LogEntry, NutritionGoals } from "../types";
 import { defaultGoals } from "../types";
 
 const KEYS = {
   entries: "nt-entries-v1",
   meals: "nt-custom-meals-v1",
   goals: "nt-goals-v1",
+  exerciseLogs: "nt-exercise-logs-v1",
 } as const;
 
 function readJson<T>(key: string, fallback: T): T {
@@ -39,4 +40,12 @@ export function loadGoals(): NutritionGoals {
 
 export function saveGoals(goals: NutritionGoals): void {
   localStorage.setItem(KEYS.goals, JSON.stringify(goals));
+}
+
+export function loadExerciseLogs(): ExerciseLogEntry[] {
+  return readJson(KEYS.exerciseLogs, []);
+}
+
+export function saveExerciseLogs(logs: ExerciseLogEntry[]): void {
+  localStorage.setItem(KEYS.exerciseLogs, JSON.stringify(logs));
 }

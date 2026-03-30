@@ -6,6 +6,7 @@ import { TrackerReadyGate } from "./components/TrackerReadyGate";
 import { DashboardPage } from "./pages/DashboardPage";
 import { CalendarPage } from "./pages/CalendarPage";
 import { CustomMealsPage } from "./pages/CustomMealsPage";
+import { ExercisePage } from "./pages/ExercisePage";
 import { LoginPage } from "./pages/LoginPage";
 
 function AppRoutes() {
@@ -32,6 +33,7 @@ function AppRoutes() {
               <Route index element={<DashboardPage />} />
               <Route path="calendar" element={<CalendarPage />} />
               <Route path="meals" element={<CustomMealsPage />} />
+              <Route path="exercise" element={<ExercisePage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>

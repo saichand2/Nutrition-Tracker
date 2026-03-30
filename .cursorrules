@@ -1,0 +1,26 @@
+# Nutrition Tracker App — AI / editor context
+
+## Stack (do not swap without explicit ask)
+- **Build:** Vite 6, Node ≥ 20
+- **UI:** React 19, TypeScript (strict), JSX `react-jsx`
+- **Routing:** React Router DOM 7
+- **Styling:** Tailwind CSS 3 + PostCSS; prefer utility classes and existing component patterns over ad-hoc inline styles
+- **Dates:** date-fns (use helpers in `src/lib/dates.ts` when applicable)
+- **Backend / sync:** Supabase (`@supabase/supabase-js`) — optional; **local-only** path uses browser `localStorage` via `src/lib/storage.ts`
+
+## Layout & architecture
+- **Pages** live in `src/pages/` (e.g. `DashboardPage`, `CalendarPage`, `CustomMealsPage`, `LoginPage`).
+- **Shared UI** in `src/components/`; **Layout** and navigation in `components/Layout.tsx`.
+- **Cross-cutting state** in `src/context/` (`AuthContext`, `TrackerContext`); prefer context + hooks over prop drilling for auth and tracker data.
+- **Domain / infra** in `src/lib/` — `supabase.ts`, `supabase-api.ts`, `storage.ts`, `validation.ts`, `macros.ts`, `ids`, etc. Shared types in `src/types.ts`.
+- **Supabase schema** reference: `supabase/schema.sql` when changing data shape.
+
+## Coding style
+- TypeScript: honor `strict`, `noUnusedLocals`, `noUnusedParameters`; avoid `any` unless unavoidable and localized.
+- React: function components; hooks at top level; keep components focused; extract reusable pieces into `components/` or small hooks when it reduces duplication.
+- Naming: match existing files (PascalCase components, camelCase functions/vars).
+- Changes: minimal, task-scoped diffs; no unrelated refactors or new dependencies unless required for the task.
+
+## Product constraints
+- Nutrition domain: calories, protein, carbs, fat, fiber; goals and daily progress are core — preserve existing UX flows unless the task says otherwise.
+- Do not commit secrets; `.env` is gitignored — use env vars for Supabase keys in local setup.

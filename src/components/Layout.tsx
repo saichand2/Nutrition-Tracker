@@ -24,6 +24,9 @@ export function Layout() {
             <NavLink to="/calendar" className={linkClass}>
               Calendar
             </NavLink>
+            <NavLink to="/exercise" className={linkClass}>
+              Exercise
+            </NavLink>
             <NavLink to="/meals" className={linkClass}>
               <span className="sm:hidden">Meals</span>
               <span className="hidden sm:inline">Custom meals</span>
