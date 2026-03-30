@@ -3,7 +3,7 @@ import { useTracker } from "../context/TrackerContext";
 import { MacroFields } from "../components/MacroFields";
 import { ProgressBar } from "../components/ProgressBar";
 import { formatRemainingToGoal, sumMacros } from "../lib/macros";
-import { todayKey } from "../lib/dates";
+import { format, parseDateKey, todayKey } from "../lib/dates";
 import { hasAnyMacroValue, unrealisticMacroHints } from "../lib/validation";
 import { emptyMacros, type LogEntry, type MacroTotals } from "../types";
 
@@ -36,6 +36,10 @@ export function DashboardPage() {
   const [breakdownKey, setBreakdownKey] = useState<keyof MacroTotals | null>(null);
 
   const today = todayKey();
+  const todayLabel = useMemo(
+    () => format(parseDateKey(today), "EEEE, MMMM d, yyyy"),
+    [today]
+  );
   const todayEntries = useMemo(
     () => entries.filter((e) => e.date === today),
     [entries, today]
@@ -103,7 +107,8 @@ export function DashboardPage() {
           Log meals for today, set goals, and see your progress at a glance.
         </p>
         <p className="mt-2 text-sm font-medium text-emerald-800">
-          Today: <time dateTime={today}>{today}</time>
+          Today:{" "}
+          <time dateTime={today}>{todayLabel}</time>
         </p>
       </header>
 
