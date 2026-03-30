@@ -2,10 +2,29 @@ import { useMemo, useState } from "react";
 import { useTracker } from "../context/TrackerContext";
 import { MacroFields } from "../components/MacroFields";
 import { ProgressBar } from "../components/ProgressBar";
-import { sumMacros } from "../lib/macros";
-import { emptyMacros, type MacroTotals } from "../types";
+import { formatRemainingToGoal, sumMacros } from "../lib/macros";
 import { todayKey } from "../lib/dates";
 import { hasAnyMacroValue, unrealisticMacroHints } from "../lib/validation";
+import { emptyMacros, type LogEntry, type MacroTotals } from "../types";
+
+const INTAKE_MACROS: { label: string; key: keyof MacroTotals; unit: string }[] = [
+  { label: "Calories", key: "calories", unit: "kcal" },
+  { label: "Protein", key: "protein", unit: "g" },
+  { label: "Carbs", key: "carbs", unit: "g" },
+  { label: "Fat", key: "fat", unit: "g" },
+  { label: "Fiber", key: "fiber", unit: "g" },
+];
+
+function sortEntriesByMacro(entries: LogEntry[], key: keyof MacroTotals): LogEntry[] {
+  return [...entries].sort((a, b) => b.nutrition[key] - a.nutrition[key]);
+}
+
+function remainingToneClass(remainingLabel: string): string {
+  if (remainingLabel.includes("over")) return "text-amber-700";
+  if (remainingLabel.includes("At goal")) return "text-emerald-600";
+  if (remainingLabel === "Set a goal") return "text-slate-400";
+  return "text-emerald-700";
+}
 
 export function DashboardPage() {
   const { entries, customMeals, goals, addEntry, setGoals } = useTracker();
@@ -14,6 +33,7 @@ export function DashboardPage() {
   const [servingMultiplier, setServingMultiplier] = useState(1);
   const [form, setForm] = useState<MacroTotals>(() => emptyMacros());
   const [goalsOpen, setGoalsOpen] = useState(true);
+  const [breakdownKey, setBreakdownKey] = useState<keyof MacroTotals | null>(null);
 
   const today = todayKey();
   const todayEntries = useMemo(
@@ -94,30 +114,78 @@ export function DashboardPage() {
             {todayEntries.length} {todayEntries.length === 1 ? "entry" : "entries"}
           </span>
         </div>
-        <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5 sm:gap-3">
-          {(
-            [
-              ["Calories", totals.calories, "kcal"],
-              ["Protein", totals.protein, "g"],
-              ["Carbs", totals.carbs, "g"],
-              ["Fat", totals.fat, "g"],
-              ["Fiber", totals.fiber, "g"],
-            ] as const
-          ).map(([label, val, u], idx) => (
-            <div
-              key={label}
-              className={`min-w-0 rounded-lg border border-slate-100 bg-slate-50/80 px-2 py-2 text-center sm:rounded-xl sm:px-4 sm:py-3 ${
-                idx === 4 ? "col-span-2 sm:col-span-1" : ""
-              }`}
-            >
-              <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500 sm:text-xs">{label}</dt>
-              <dd className="mt-0.5 text-xs font-semibold tabular-nums text-slate-900 sm:mt-1 sm:text-xl">
-                {Math.round(val * 10) / 10}
-                <span className="font-normal text-slate-500 sm:text-sm">{" "}{u}</span>
-              </dd>
-            </div>
-          ))}
-        </dl>
+        <p className="mt-2 text-xs text-slate-500">
+          Logged totals vs your daily goals. Tap a macro for a per-meal breakdown.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5 sm:gap-3" role="group" aria-label="Today macro totals">
+          {INTAKE_MACROS.map(({ label, key, unit }, idx) => {
+            const val = totals[key];
+            const goalVal = goals[key];
+            const open = breakdownKey === key;
+            const remainingLabel = formatRemainingToGoal(val, goalVal, unit);
+            return (
+              <div
+                key={key}
+                className={`min-w-0 sm:col-span-1 ${idx === 4 ? "col-span-2 sm:col-span-1" : ""}`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setBreakdownKey((k) => (k === key ? null : key))}
+                  aria-pressed={open}
+                  className={`w-full rounded-xl border-2 px-2 py-2 text-center shadow-sm ring-1 transition sm:px-4 sm:py-3 ${
+                    open
+                      ? "border-emerald-500 bg-emerald-50/90 ring-emerald-300"
+                      : "border-slate-300 bg-white ring-slate-200/90 hover:border-slate-400 hover:bg-slate-50/80"
+                  }`}
+                >
+                  <span className="block text-[11px] font-medium uppercase tracking-wide text-slate-500 sm:text-xs">
+                    {label}
+                  </span>
+                  <span className="mt-0.5 block text-xs font-semibold tabular-nums text-slate-900 sm:mt-1 sm:text-xl">
+                    {Math.round(val * 10) / 10}
+                    <span className="font-normal text-slate-500 sm:text-sm">{" "}{unit}</span>
+                  </span>
+                  <span
+                    className={`mt-1 block text-[10px] font-semibold leading-tight sm:text-xs ${remainingToneClass(remainingLabel)}`}
+                  >
+                    {remainingLabel}
+                  </span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        {breakdownKey !== null && (
+          <div
+            className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 text-left"
+            role="region"
+            aria-label={`${INTAKE_MACROS.find((m) => m.key === breakdownKey)?.label ?? ""} breakdown`}
+          >
+            <p className="text-sm font-semibold text-slate-800">
+              {INTAKE_MACROS.find((m) => m.key === breakdownKey)?.label} from today&apos;s meals
+            </p>
+            {todayEntries.length === 0 ? (
+              <p className="mt-2 text-sm text-slate-600">No meals logged yet.</p>
+            ) : (
+              <ul className="mt-3 divide-y divide-emerald-200/70">
+                {sortEntriesByMacro(todayEntries, breakdownKey).map((e) => {
+                  const v = e.nutrition[breakdownKey];
+                  const unit = INTAKE_MACROS.find((m) => m.key === breakdownKey)?.unit ?? "";
+                  return (
+                    <li key={e.id} className="flex justify-between gap-3 py-2.5 text-sm first:pt-0 last:pb-0">
+                      <span className="min-w-0 font-medium text-slate-800">{e.mealName}</span>
+                      <span className="shrink-0 tabular-nums text-slate-700">
+                        {Math.round(v * 10) / 10} {unit}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <p className="mt-3 text-xs text-slate-500">Tap the tile again to close.</p>
+          </div>
+        )}
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">

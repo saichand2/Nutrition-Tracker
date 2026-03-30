@@ -31,3 +31,13 @@ export function clampPct(value: number, goal: number): number {
   if (goal <= 0) return 0;
   return Math.min(100, Math.round((value / goal) * 100));
 }
+
+/** Remaining vs daily goal for Today’s intake (short label for UI tiles). */
+export function formatRemainingToGoal(current: number, goal: number, unit: string): string {
+  if (goal <= 0) return "Set a goal";
+  const diff = goal - current;
+  const rounded = Math.round(Math.abs(diff) * 10) / 10;
+  if (diff > 0) return `${rounded} ${unit} left`;
+  if (diff === 0) return "At goal";
+  return `${rounded} ${unit} over`;
+}
