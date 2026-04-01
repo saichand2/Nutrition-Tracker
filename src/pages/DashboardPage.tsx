@@ -19,6 +19,14 @@ function sortEntriesByMacro(entries: LogEntry[], key: keyof MacroTotals): LogEnt
   return [...entries].sort((a, b) => b.nutrition[key] - a.nutrition[key]);
 }
 
+/** Calories: chronological (oldest log first). Other macros: highest value first. */
+function sortEntriesForBreakdown(entries: LogEntry[], key: keyof MacroTotals): LogEntry[] {
+  if (key === "calories") {
+    return [...entries];
+  }
+  return sortEntriesByMacro(entries, key);
+}
+
 function remainingToneClass(remainingLabel: string): string {
   if (remainingLabel.includes("over")) return "text-amber-700";
   if (remainingLabel.includes("At goal")) return "text-emerald-600";
@@ -34,6 +42,7 @@ export function DashboardPage() {
   const [form, setForm] = useState<MacroTotals>(() => emptyMacros());
   const [goalsOpen, setGoalsOpen] = useState(true);
   const [breakdownKey, setBreakdownKey] = useState<keyof MacroTotals | null>(null);
+  const [entriesListOpen, setEntriesListOpen] = useState(false);
 
   const today = todayKey();
   const todayLabel = useMemo(
@@ -115,12 +124,20 @@ export function DashboardPage() {
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold text-slate-900">Today&apos;s intake</h2>
-          <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-800">
+          <button
+            type="button"
+            onClick={() => {
+              setBreakdownKey(null);
+              setEntriesListOpen((v) => !v);
+            }}
+            aria-expanded={entriesListOpen}
+            className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-800 hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+          >
             {todayEntries.length} {todayEntries.length === 1 ? "entry" : "entries"}
-          </span>
+          </button>
         </div>
         <p className="mt-2 text-xs text-slate-500">
-          Logged totals vs your daily goals. Tap a macro for a per-meal breakdown.
+          Logged totals vs your daily goals. Tap the entry count or a macro for details.
         </p>
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5 sm:gap-3" role="group" aria-label="Today macro totals">
           {INTAKE_MACROS.map(({ label, key, unit }, idx) => {
@@ -135,7 +152,10 @@ export function DashboardPage() {
               >
                 <button
                   type="button"
-                  onClick={() => setBreakdownKey((k) => (k === key ? null : key))}
+                  onClick={() => {
+                    setEntriesListOpen(false);
+                    setBreakdownKey((k) => (k === key ? null : key));
+                  }}
                   aria-pressed={open}
                   className={`w-full rounded-xl border-2 px-2 py-2 text-center shadow-sm ring-1 transition sm:px-4 sm:py-3 ${
                     open
@@ -161,6 +181,36 @@ export function DashboardPage() {
           })}
         </div>
 
+        {entriesListOpen && (
+          <div
+            className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 text-left"
+            role="region"
+            aria-label="Today's logged entries"
+          >
+            <p className="text-sm font-semibold text-slate-800">Today&apos;s entries</p>
+            <p className="mt-1 text-xs text-slate-600">Oldest logged first. Tap the count again to close.</p>
+            {todayEntries.length === 0 ? (
+              <p className="mt-2 text-sm text-slate-600">No meals logged yet.</p>
+            ) : (
+              <ul className="mt-3 divide-y divide-emerald-200/70">
+                {[...todayEntries].map((e) => {
+                  const n = e.nutrition;
+                  const r = (x: number) => Math.round(x * 10) / 10;
+                  return (
+                    <li key={e.id} className="py-3 first:pt-0 last:pb-0">
+                      <p className="font-medium text-slate-900">{e.mealName}</p>
+                      <p className="mt-1 text-sm tabular-nums text-slate-600">
+                        {r(n.calories)} kcal · P {r(n.protein)}g · C {r(n.carbs)}g · F {r(n.fat)}g · Fiber{" "}
+                        {r(n.fiber)}g
+                      </p>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        )}
+
         {breakdownKey !== null && (
           <div
             className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 text-left"
@@ -174,7 +224,7 @@ export function DashboardPage() {
               <p className="mt-2 text-sm text-slate-600">No meals logged yet.</p>
             ) : (
               <ul className="mt-3 divide-y divide-emerald-200/70">
-                {sortEntriesByMacro(todayEntries, breakdownKey).map((e) => {
+                {sortEntriesForBreakdown(todayEntries, breakdownKey).map((e) => {
                   const v = e.nutrition[breakdownKey];
                   const unit = INTAKE_MACROS.find((m) => m.key === breakdownKey)?.unit ?? "";
                   return (

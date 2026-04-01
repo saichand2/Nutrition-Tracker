@@ -7,22 +7,26 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { BackupData, CustomMeal, LogEntry, MacroTotals, NutritionGoals } from "../types";
+import type { BackupData, CustomMeal, ExerciseLogEntry, LogEntry, MacroTotals, NutritionGoals } from "../types";
 import { createId } from "../lib/id";
 import {
   loadCustomMeals,
+  loadExerciseLogs,
   loadEntries,
   loadGoals,
   saveCustomMeals,
+  saveExerciseLogs,
   saveEntries,
   saveGoals,
 } from "../lib/storage";
 import { useAuth } from "./AuthContext";
 import {
   deleteCustomMealCloud,
+  deleteExerciseLogCloud,
   deleteLogEntryCloud,
   fetchUserData,
   insertCustomMealCloud,
+  insertExerciseLogCloud,
   insertLogEntryCloud,
   replaceAllUserDataCloud,
   updateCustomMealCloud,
@@ -35,6 +39,7 @@ type TrackerContextValue = {
   storageMode: "local" | "cloud";
   entries: LogEntry[];
   customMeals: CustomMeal[];
+  exerciseLogs: ExerciseLogEntry[];
   goals: NutritionGoals;
   addEntry: (input: {
     date: string;
@@ -47,6 +52,8 @@ type TrackerContextValue = {
   addCustomMeal: (meal: Omit<CustomMeal, "id">) => Promise<void>;
   updateCustomMeal: (id: string, patch: Partial<Omit<CustomMeal, "id">>) => Promise<void>;
   deleteCustomMeal: (id: string) => Promise<void>;
+  addExerciseLog: (input: Omit<ExerciseLogEntry, "id">) => Promise<void>;
+  deleteExerciseLog: (id: string) => Promise<void>;
   setGoals: (g: NutritionGoals) => Promise<void>;
   getBackupData: () => BackupData;
   importBackupData: (payload: BackupData) => Promise<void>;
@@ -62,12 +69,14 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(!cloud);
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [customMeals, setCustomMeals] = useState<CustomMeal[]>([]);
+  const [exerciseLogs, setExerciseLogs] = useState<ExerciseLogEntry[]>([]);
   const [goals, setGoalsState] = useState<NutritionGoals>(() => loadGoals());
 
   useEffect(() => {
     if (!cloud) {
       setEntries(loadEntries());
       setCustomMeals(loadCustomMeals());
+      setExerciseLogs(loadExerciseLogs());
       setGoalsState(loadGoals());
       setReady(true);
       return;
@@ -81,6 +90,7 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
         if (!cancelled) {
           setEntries(data.entries);
           setCustomMeals(data.customMeals);
+          setExerciseLogs(data.exerciseLogs);
           setGoalsState(data.goals);
         }
       } catch (e) {
@@ -88,6 +98,7 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
         if (!cancelled) {
           setEntries([]);
           setCustomMeals([]);
+          setExerciseLogs(loadExerciseLogs());
           setGoalsState(loadGoals());
         }
       } finally {
@@ -228,6 +239,33 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
     [customMeals, cloud, userId]
   );
 
+  const addExerciseLog = useCallback(
+    async (input: Omit<ExerciseLogEntry, "id">) => {
+      const entry: ExerciseLogEntry = { ...input, id: createId() };
+      const next = [...exerciseLogs, entry];
+      setExerciseLogs(next);
+      if (cloud) {
+        await insertExerciseLogCloud(userId!, entry);
+      } else {
+        saveExerciseLogs(next);
+      }
+    },
+    [exerciseLogs, cloud, userId]
+  );
+
+  const deleteExerciseLog = useCallback(
+    async (id: string) => {
+      const next = exerciseLogs.filter((e) => e.id !== id);
+      setExerciseLogs(next);
+      if (cloud) {
+        await deleteExerciseLogCloud(userId!, id);
+      } else {
+        saveExerciseLogs(next);
+      }
+    },
+    [exerciseLogs, cloud, userId]
+  );
+
   const getBackupData = useCallback(
     (): BackupData => ({
       version: 1,
@@ -246,12 +284,14 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
       const nextGoals = payload.goals ?? goals;
       setEntries(nextEntries);
       setCustomMeals(nextMeals);
+      setExerciseLogs([]);
       setGoalsState(nextGoals);
       if (cloud) {
-        await replaceAllUserDataCloud(userId!, nextEntries, nextMeals, nextGoals);
+        await replaceAllUserDataCloud(userId!, nextEntries, nextMeals, nextGoals, []);
       } else {
         saveEntries(nextEntries);
         saveCustomMeals(nextMeals);
+        saveExerciseLogs([]);
         saveGoals(nextGoals);
       }
     },
@@ -264,6 +304,7 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
       storageMode: cloud ? "cloud" : "local",
       entries,
       customMeals,
+      exerciseLogs,
       goals,
       addEntry,
       updateEntry,
@@ -271,6 +312,8 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
       addCustomMeal,
       updateCustomMeal,
       deleteCustomMeal,
+      addExerciseLog,
+      deleteExerciseLog,
       setGoals,
       getBackupData,
       importBackupData,
@@ -280,6 +323,7 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
       cloud,
       entries,
       customMeals,
+      exerciseLogs,
       goals,
       addEntry,
       updateEntry,
@@ -287,6 +331,8 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
       addCustomMeal,
       updateCustomMeal,
       deleteCustomMeal,
+      addExerciseLog,
+      deleteExerciseLog,
       setGoals,
       getBackupData,
       importBackupData,

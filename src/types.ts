@@ -45,7 +45,7 @@ export const defaultGoals = (): NutritionGoals => ({
   fiber: 30,
 });
 
-export type ExerciseGroupId = "push" | "pull" | "biceps" | "legs";
+export type ExerciseGroupId = "push" | "pull" | "legs";
 
 export type ExerciseLogEntry = {
   id: string;

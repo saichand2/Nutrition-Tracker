@@ -1,9 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { EXERCISE_GROUP_IDS, EXERCISE_GROUP_LABELS, EXERCISES_BY_GROUP } from "../lib/exercises";
-import { createId } from "../lib/id";
-import { format, parseDateKey, todayKey } from "../lib/dates";
-import { loadExerciseLogs, saveExerciseLogs } from "../lib/storage";
-import type { ExerciseGroupId, ExerciseLogEntry } from "../types";
+import { eachDayOfInterval, endOfWeek, format, parseDateKey, startOfWeek, toDateKey, todayKey } from "../lib/dates";
+import { useTracker } from "../context/TrackerContext";
+import type { ExerciseGroupId } from "../types";
 
 const inputClass =
   "mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500";
@@ -11,11 +10,13 @@ const inputClass =
 const labelClass = "block text-xs font-medium text-slate-600";
 
 export function ExercisePage() {
-  const [logs, setLogs] = useState<ExerciseLogEntry[]>(() => loadExerciseLogs());
+  const { exerciseLogs: logs, addExerciseLog, deleteExerciseLog } = useTracker();
   const [groupId, setGroupId] = useState<ExerciseGroupId>("push");
   const [exerciseName, setExerciseName] = useState<string>(() => EXERCISES_BY_GROUP.push[0]!);
   const [weightInput, setWeightInput] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const today = todayKey();
+  const [selectedDate, setSelectedDate] = useState(today);
 
   const exerciseOptions = EXERCISES_BY_GROUP[groupId];
 
@@ -31,14 +32,47 @@ export function ExercisePage() {
     setFormError(null);
   }, []);
 
-  const pastForSelection = useMemo(() => {
-    if (!exerciseName) return [];
-    return logs
-      .filter((l) => l.groupId === groupId && l.exerciseName === exerciseName)
-      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-  }, [logs, groupId, exerciseName]);
+  const weekDays = useMemo(() => {
+    const selected = parseDateKey(selectedDate);
+    const start = startOfWeek(selected, { weekStartsOn: 0 });
+    const end = endOfWeek(selected, { weekStartsOn: 0 });
+    return eachDayOfInterval({ start, end });
+  }, [selectedDate]);
+  const weekLabel = useMemo(
+    () => `${format(weekDays[0]!, "MMM d")} - ${format(weekDays[6]!, "MMM d, yyyy")}`,
+    [weekDays]
+  );
 
-  const logSet = useCallback(() => {
+  const logsForSelectedDay = useMemo(
+    () => logs.filter((l) => l.date === selectedDate),
+    [logs, selectedDate]
+  );
+  const recentSelectionLogs = useMemo(() => {
+    const end = parseDateKey(today);
+    end.setHours(23, 59, 59, 999);
+    const start = new Date(end);
+    start.setDate(start.getDate() - 2);
+    start.setHours(0, 0, 0, 0);
+
+    return logs
+      .filter((l) => {
+        if (l.groupId !== groupId || l.exerciseName !== exerciseName) return false;
+        const d = parseDateKey(l.date);
+        return d >= start && d <= end;
+      })
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  }, [logs, groupId, exerciseName, today]);
+  const groupsByDate = useMemo(() => {
+    const map = new Map<string, ExerciseGroupId[]>();
+    for (const entry of logs) {
+      const current = map.get(entry.date) ?? [];
+      if (!current.includes(entry.groupId)) current.push(entry.groupId);
+      map.set(entry.date, current);
+    }
+    return map;
+  }, [logs]);
+
+  const logSet = useCallback(async () => {
     setFormError(null);
     const trimmed = weightInput.trim();
     const parsed = trimmed === "" ? null : Number.parseFloat(trimmed.replace(",", "."));
@@ -46,7 +80,7 @@ export function ExercisePage() {
 
     if (isLegs) {
       if (trimmed === "" || parsed === null || Number.isNaN(parsed) || parsed <= 0) {
-        setFormError("Enter weight (kg) for leg exercises.");
+        setFormError("Enter weight (lbs) for leg exercises.");
         return;
       }
     } else if (trimmed !== "" && (parsed === null || Number.isNaN(parsed) || parsed < 0)) {
@@ -57,18 +91,25 @@ export function ExercisePage() {
     const weightKg =
       isLegs ? parsed! : trimmed === "" || parsed === null || Number.isNaN(parsed) ? null : parsed;
 
-    const entry: ExerciseLogEntry = {
-      id: createId(),
-      date: todayKey(),
+    await addExerciseLog({
+      date: today,
       groupId,
       exerciseName,
       weightKg,
-    };
-    const next = [...logs, entry];
-    setLogs(next);
-    saveExerciseLogs(next);
+    });
     if (isLegs) setWeightInput("");
-  }, [weightInput, groupId, exerciseName, logs]);
+  }, [weightInput, groupId, exerciseName, today, addExerciseLog]);
+
+  const deleteLog = useCallback(
+    (id: string) => {
+      const target = logs.find((l) => l.id === id);
+      if (!target) return;
+      const ok = confirm(`Delete log for "${target.exerciseName}" on ${target.date}?`);
+      if (!ok) return;
+      void deleteExerciseLog(id);
+    },
+    [logs, deleteExerciseLog]
+  );
 
   return (
     <div className="mx-auto max-w-4xl px-3 py-6 sm:px-4">
@@ -121,7 +162,7 @@ export function ExercisePage() {
             </div>
             <div>
               <label htmlFor="ex-weight" className={labelClass}>
-                Weight (kg)
+                Weight (lbs)
                 {groupId === "legs" ? (
                   <span className="font-normal text-emerald-700"> — required for legs</span>
                 ) : (
@@ -135,7 +176,7 @@ export function ExercisePage() {
                 step="0.5"
                 inputMode="decimal"
                 className={inputClass}
-                placeholder={groupId === "legs" ? "e.g. 60" : "Optional"}
+                placeholder={groupId === "legs" ? "e.g. 135" : "Optional"}
                 value={weightInput}
                 onChange={(e) => {
                   setWeightInput(e.target.value);
@@ -151,30 +192,139 @@ export function ExercisePage() {
             >
               Log set
             </button>
+
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+              <p className="text-xs font-semibold text-slate-800">
+                Previous 3 days for {exerciseName} ({EXERCISE_GROUP_LABELS[groupId]})
+              </p>
+              {recentSelectionLogs.length === 0 ? (
+                <p className="mt-1 text-xs text-slate-600">No logs found in the last 3 days.</p>
+              ) : (
+                <ul className="mt-2 space-y-1.5">
+                  {recentSelectionLogs.map((row) => (
+                    <li key={row.id} className="flex items-center justify-between gap-2 text-xs">
+                      <span className="text-slate-600">{format(parseDateKey(row.date), "MMM d")}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium tabular-nums text-slate-900">
+                          {row.weightKg != null ? `${row.weightKg} lbs` : "—"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => deleteLog(row.id)}
+                          className="rounded border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-700 hover:bg-rose-100"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </section>
 
         <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
           <h2 className="text-sm font-semibold text-slate-900">Past log</h2>
           <p className="mt-1 text-xs text-slate-500">
-            History for <span className="font-medium text-slate-700">{exerciseName || "—"}</span> (
-            {EXERCISE_GROUP_LABELS[groupId]}). Updates as you change the dropdowns or after you log.
+            Select a day in the week calendar to see all exercise logs for that day.
           </p>
-          {pastForSelection.length === 0 ? (
-            <p className="mt-6 text-sm text-slate-500">No entries yet for this exercise.</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const d = parseDateKey(selectedDate);
+                d.setDate(d.getDate() - 7);
+                setSelectedDate(toDateKey(d));
+              }}
+              className="order-2 flex-1 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 sm:order-1 sm:flex-none sm:py-1.5"
+            >
+              Previous week
+            </button>
+            <div className="order-1 flex w-full items-center justify-center gap-2 sm:order-2 sm:w-auto">
+              <p className="text-xs font-medium text-slate-600">{weekLabel}</p>
+              <button
+                type="button"
+                onClick={() => setSelectedDate(today)}
+                className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
+              >
+                Today
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const d = parseDateKey(selectedDate);
+                d.setDate(d.getDate() + 7);
+                setSelectedDate(toDateKey(d));
+              }}
+              className="order-3 flex-1 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 sm:flex-none sm:py-1.5"
+            >
+              Next week
+            </button>
+          </div>
+          <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-7 sm:gap-1">
+            {weekDays.map((d) => {
+              const key = toDateKey(d);
+              const active = key === selectedDate;
+              const isToday = key === today;
+              const groups = groupsByDate.get(key) ?? [];
+              const groupsLabel =
+                groups.length <= 2
+                  ? groups.map((g) => EXERCISE_GROUP_LABELS[g]).join(", ")
+                  : `${EXERCISE_GROUP_LABELS[groups[0]!]}, ${EXERCISE_GROUP_LABELS[groups[1]!]} +${
+                      groups.length - 2
+                    }`;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setSelectedDate(key)}
+                  className={`rounded-lg border px-1.5 py-2 text-center text-xs transition sm:px-1 ${
+                    active
+                      ? "border-emerald-400 bg-emerald-100 text-emerald-900"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  <span className="block uppercase">{format(d, "EEE")}</span>
+                  <span className="block text-sm font-semibold">{format(d, "d")}</span>
+                  <span className="block text-[10px]">{isToday ? "Today" : " "}</span>
+                  <span className="block min-h-[10px] truncate text-[10px] leading-tight text-slate-500">
+                    {groups.length > 0 ? groupsLabel : " "}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {logsForSelectedDay.length === 0 ? (
+            <p className="mt-6 text-sm text-slate-500">
+              No exercise logs for {format(parseDateKey(selectedDate), "MMM d, yyyy")}.
+            </p>
           ) : (
             <ul className="mt-4 max-h-[min(24rem,50vh)] space-y-2 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50/80 p-3">
-              {pastForSelection.map((row) => (
-                <li
-                  key={row.id}
-                  className="flex items-baseline justify-between gap-3 rounded-md border border-slate-100 bg-white px-3 py-2 text-sm"
-                >
-                  <span className="text-slate-600">
-                    {format(parseDateKey(row.date), "MMM d, yyyy")}
-                  </span>
-                  <span className="shrink-0 font-medium tabular-nums text-slate-900">
-                    {row.weightKg != null ? `${row.weightKg} kg` : "—"}
-                  </span>
+              {logsForSelectedDay.map((row) => (
+                <li key={row.id} className="rounded-md border border-slate-100 bg-white px-3 py-2 text-sm">
+                  <div className="flex items-baseline justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-slate-800">{row.exerciseName}</p>
+                    <p className="text-xs text-slate-500">
+                      {EXERCISE_GROUP_LABELS[row.groupId]} · {format(parseDateKey(row.date), "MMM d, yyyy")}
+                    </p>
+                  </div>
+                    <span className="shrink-0 font-medium tabular-nums text-slate-900">
+                      {row.weightKg != null ? `${row.weightKg} lbs` : "—"}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => deleteLog(row.id)}
+                      className="rounded border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100"
+                    >
+                      Delete log
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>

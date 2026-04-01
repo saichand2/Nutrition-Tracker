@@ -39,12 +39,32 @@ create table if not exists public.log_entries (
   created_at timestamptz default now()
 );
 
+create table if not exists public.exercise_logs (
+  id text primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  entry_date text not null,
+  group_id text not null,
+  exercise_name text not null,
+  weight_lbs numeric,
+  created_at timestamptz default now()
+);
+
 create index if not exists log_entries_user_date_idx on public.log_entries (user_id, entry_date);
 create index if not exists custom_meals_user_idx on public.custom_meals (user_id);
+create index if not exists exercise_logs_user_date_idx on public.exercise_logs (user_id, entry_date);
 
 alter table public.nutrition_goals enable row level security;
 alter table public.custom_meals enable row level security;
 alter table public.log_entries enable row level security;
+alter table public.exercise_logs enable row level security;
+
+drop policy if exists "nutrition_goals_select_own" on public.nutrition_goals;
+drop policy if exists "nutrition_goals_insert_own" on public.nutrition_goals;
+drop policy if exists "nutrition_goals_update_own" on public.nutrition_goals;
+drop policy if exists "nutrition_goals_delete_own" on public.nutrition_goals;
+drop policy if exists "custom_meals_all_own" on public.custom_meals;
+drop policy if exists "log_entries_all_own" on public.log_entries;
+drop policy if exists "exercise_logs_all_own" on public.exercise_logs;
 
 create policy "nutrition_goals_select_own"
   on public.nutrition_goals for select
@@ -70,5 +90,10 @@ create policy "custom_meals_all_own"
 
 create policy "log_entries_all_own"
   on public.log_entries for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "exercise_logs_all_own"
+  on public.exercise_logs for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
