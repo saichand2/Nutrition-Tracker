@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { useTracker } from "../context/TrackerContext";
 import { MacroFields } from "../components/MacroFields";
+import { todayKey } from "../lib/dates";
 import type { BackupData, CustomMeal, MacroTotals } from "../types";
 import { emptyMacros } from "../types";
 import { hasAnyMacroValue, unrealisticMacroHints } from "../lib/validation";
@@ -151,6 +152,7 @@ export function CustomMealsPage() {
     addCustomMeal,
     updateCustomMeal,
     deleteCustomMeal,
+    addEntry,
     getBackupData,
     importBackupData,
   } = useTracker();
@@ -194,6 +196,17 @@ export function CustomMealsPage() {
       await addCustomMeal({ name, ...form.nutrition });
     }
     resetForm();
+  };
+
+  const handleAddToTodayTrack = async () => {
+    const name = form.name.trim();
+    if (!name || !hasAnyMacroValue(form.nutrition)) return;
+    await addEntry({
+      date: todayKey(),
+      mealName: name,
+      nutrition: { ...form.nutrition },
+      customMealId: editingId ?? undefined,
+    });
   };
 
   const runAiEstimate = useCallback(
@@ -427,21 +440,27 @@ export function CustomMealsPage() {
               ))}
             </ul>
           )}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <button
               type="submit"
               disabled={!canSaveMeal}
-              className={`min-h-11 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white shadow hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300 ${
-                !editingId ? "col-span-2" : ""
-              }`}
+              className="min-h-11 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white shadow hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
             >
               {editingId ? "Save changes" : "Add meal"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleAddToTodayTrack()}
+              disabled={!canSaveMeal}
+              className="min-h-11 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 font-medium text-emerald-900 shadow-sm hover:bg-emerald-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+            >
+              Add to today&apos;s track
             </button>
             {editingId && (
               <button
                 type="button"
                 onClick={resetForm}
-                className="min-h-11 rounded-lg border border-slate-200 px-4 py-2.5 font-medium text-slate-700 hover:bg-slate-50"
+                className="min-h-11 rounded-lg border border-slate-200 px-4 py-2.5 font-medium text-slate-700 hover:bg-slate-50 sm:col-span-2"
               >
                 Cancel edit
               </button>
