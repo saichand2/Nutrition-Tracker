@@ -47,21 +47,17 @@ export function ExercisePage() {
     () => logs.filter((l) => l.date === selectedDate),
     [logs, selectedDate]
   );
+  /** Three most recent logs for the selected group + exercise (newest first). */
   const recentSelectionLogs = useMemo(() => {
-    const end = parseDateKey(today);
-    end.setHours(23, 59, 59, 999);
-    const start = new Date(end);
-    start.setDate(start.getDate() - 2);
-    start.setHours(0, 0, 0, 0);
-
     return logs
-      .filter((l) => {
-        if (l.groupId !== groupId || l.exerciseName !== exerciseName) return false;
-        const d = parseDateKey(l.date);
-        return d >= start && d <= end;
+      .filter((l) => l.groupId === groupId && l.exerciseName === exerciseName)
+      .sort((a, b) => {
+        const byDate = b.date.localeCompare(a.date);
+        if (byDate !== 0) return byDate;
+        return b.id.localeCompare(a.id);
       })
-      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-  }, [logs, groupId, exerciseName, today]);
+      .slice(0, 3);
+  }, [logs, groupId, exerciseName]);
   const groupsByDate = useMemo(() => {
     const map = new Map<string, ExerciseGroupId[]>();
     for (const entry of logs) {
@@ -195,15 +191,15 @@ export function ExercisePage() {
 
             <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
               <p className="text-xs font-semibold text-slate-800">
-                Previous 3 days for {exerciseName} ({EXERCISE_GROUP_LABELS[groupId]})
+                Last 3 logs · {exerciseName} ({EXERCISE_GROUP_LABELS[groupId]})
               </p>
               {recentSelectionLogs.length === 0 ? (
-                <p className="mt-1 text-xs text-slate-600">No logs found in the last 3 days.</p>
+                <p className="mt-1 text-xs text-slate-600">No logs yet for this exercise.</p>
               ) : (
                 <ul className="mt-2 space-y-1.5">
                   {recentSelectionLogs.map((row) => (
                     <li key={row.id} className="flex items-center justify-between gap-2 text-xs">
-                      <span className="text-slate-600">{format(parseDateKey(row.date), "MMM d")}</span>
+                      <span className="text-slate-600">{format(parseDateKey(row.date), "EEE, MMM d")}</span>
                       <div className="flex items-center gap-2">
                         <span className="font-medium tabular-nums text-slate-900">
                           {row.weightKg != null ? `${row.weightKg} lbs` : "—"}
@@ -309,7 +305,7 @@ export function ExercisePage() {
                   <div className="min-w-0">
                     <p className="truncate font-medium text-slate-800">{row.exerciseName}</p>
                     <p className="text-xs text-slate-500">
-                      {EXERCISE_GROUP_LABELS[row.groupId]} · {format(parseDateKey(row.date), "MMM d, yyyy")}
+                      {EXERCISE_GROUP_LABELS[row.groupId]} · {format(parseDateKey(row.date), "EEE, MMM d, yyyy")}
                     </p>
                   </div>
                     <span className="shrink-0 font-medium tabular-nums text-slate-900">

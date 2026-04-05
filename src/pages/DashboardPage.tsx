@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { useTracker } from "../context/TrackerContext";
+import { IntakeMacroGraphRow } from "../components/IntakeMacroGraphRow";
 import { MacroFields } from "../components/MacroFields";
 import { ProgressBar } from "../components/ProgressBar";
+import { mealDisplayLabel } from "../lib/meal-display";
 import { formatRemainingToGoal, sumMacros } from "../lib/macros";
 import { format, parseDateKey, todayKey } from "../lib/dates";
 import { hasAnyMacroValue, unrealisticMacroHints } from "../lib/validation";
@@ -94,9 +96,14 @@ export function DashboardPage() {
   const handleAdd = async () => {
     const hasData = hasAnyMacroValue(form);
     if (!hasData) return;
+    const baseName = mealName.trim() || "Meal";
+    const mealNameToStore =
+      selectedMealId && servingMultiplier !== 1
+        ? `${baseName} (${servingMultiplier}× serving)`
+        : baseName;
     await addEntry({
       date: today,
-      mealName: mealName.trim() || "Meal",
+      mealName: mealNameToStore,
       nutrition: { ...form },
       customMealId: selectedMealId || undefined,
     });
@@ -107,6 +114,29 @@ export function DashboardPage() {
   };
 
   const mealHints = unrealisticMacroHints(form);
+
+  const renderIntakeMacroButton = (meta: (typeof INTAKE_MACROS)[number]) => {
+    const { label, key, unit } = meta;
+    const val = totals[key];
+    const goalVal = goals[key];
+    const open = breakdownKey === key;
+    const remainingLabel = formatRemainingToGoal(val, goalVal, unit);
+    return (
+      <IntakeMacroGraphRow
+        label={label}
+        unit={unit}
+        current={val}
+        goal={goalVal}
+        selected={open}
+        remainingLabel={remainingLabel}
+        remainingToneClass={remainingToneClass(remainingLabel)}
+        onToggle={() => {
+          setEntriesListOpen(false);
+          setBreakdownKey((k) => (k === key ? null : key));
+        }}
+      />
+    );
+  };
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-5 sm:space-y-8 sm:py-8">
@@ -137,48 +167,22 @@ export function DashboardPage() {
           </button>
         </div>
         <p className="mt-2 text-xs text-slate-500">
-          Logged totals vs your daily goals. Tap the entry count or a macro for details.
+          <span className="font-medium text-slate-600">Bar graph</span> — each row is logged vs goal. Colors: orange
+          under 50%, amber 50–85%, green 85–100%, red over goal. Tap the entry count or a bar for meal breakdown.
         </p>
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5 sm:gap-3" role="group" aria-label="Today macro totals">
-          {INTAKE_MACROS.map(({ label, key, unit }, idx) => {
-            const val = totals[key];
-            const goalVal = goals[key];
-            const open = breakdownKey === key;
-            const remainingLabel = formatRemainingToGoal(val, goalVal, unit);
-            return (
-              <div
-                key={key}
-                className={`min-w-0 sm:col-span-1 ${idx === 4 ? "col-span-2 sm:col-span-1" : ""}`}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEntriesListOpen(false);
-                    setBreakdownKey((k) => (k === key ? null : key));
-                  }}
-                  aria-pressed={open}
-                  className={`w-full rounded-xl border-2 px-2 py-2 text-center shadow-sm ring-1 transition sm:px-4 sm:py-3 ${
-                    open
-                      ? "border-emerald-500 bg-emerald-50/90 ring-emerald-300"
-                      : "border-slate-300 bg-white ring-slate-200/90 hover:border-slate-400 hover:bg-slate-50/80"
-                  }`}
-                >
-                  <span className="block text-[11px] font-medium uppercase tracking-wide text-slate-500 sm:text-xs">
-                    {label}
-                  </span>
-                  <span className="mt-0.5 block text-xs font-semibold tabular-nums text-slate-900 sm:mt-1 sm:text-xl">
-                    {Math.round(val * 10) / 10}
-                    <span className="font-normal text-slate-500 sm:text-sm">{" "}{unit}</span>
-                  </span>
-                  <span
-                    className={`mt-1 block text-[10px] font-semibold leading-tight sm:text-xs ${remainingToneClass(remainingLabel)}`}
-                  >
-                    {remainingLabel}
-                  </span>
-                </button>
-              </div>
-            );
-          })}
+        <div
+          className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-5"
+          role="group"
+          aria-label="Today macro totals"
+        >
+          {INTAKE_MACROS.map((meta) => (
+            <div
+              key={meta.key}
+              className={`min-w-0 ${meta.key === "calories" ? "col-span-2 md:col-span-5" : ""}`}
+            >
+              {renderIntakeMacroButton(meta)}
+            </div>
+          ))}
         </div>
 
         {entriesListOpen && (
@@ -198,7 +202,7 @@ export function DashboardPage() {
                   const r = (x: number) => Math.round(x * 10) / 10;
                   return (
                     <li key={e.id} className="py-3 first:pt-0 last:pb-0">
-                      <p className="font-medium text-slate-900">{e.mealName}</p>
+                      <p className="font-medium text-slate-900">{mealDisplayLabel(e, customMeals)}</p>
                       <p className="mt-1 text-sm tabular-nums text-slate-600">
                         {r(n.calories)} kcal · P {r(n.protein)}g · C {r(n.carbs)}g · F {r(n.fat)}g · Fiber{" "}
                         {r(n.fiber)}g
@@ -229,7 +233,9 @@ export function DashboardPage() {
                   const unit = INTAKE_MACROS.find((m) => m.key === breakdownKey)?.unit ?? "";
                   return (
                     <li key={e.id} className="flex justify-between gap-3 py-2.5 text-sm first:pt-0 last:pb-0">
-                      <span className="min-w-0 font-medium text-slate-800">{e.mealName}</span>
+                      <span className="min-w-0 font-medium text-slate-800">
+                        {mealDisplayLabel(e, customMeals)}
+                      </span>
                       <span className="shrink-0 tabular-nums text-slate-700">
                         {Math.round(v * 10) / 10} {unit}
                       </span>
@@ -238,7 +244,7 @@ export function DashboardPage() {
                 })}
               </ul>
             )}
-            <p className="mt-3 text-xs text-slate-500">Tap the tile again to close.</p>
+            <p className="mt-3 text-xs text-slate-500">Tap the row again to close.</p>
           </div>
         )}
       </section>
