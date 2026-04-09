@@ -3,13 +3,14 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { TrackerProvider } from "./context/TrackerContext";
 import { Layout } from "./components/Layout";
 import { TrackerReadyGate } from "./components/TrackerReadyGate";
+import { AuthCallbackPage } from "./pages/AuthCallbackPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { CalendarPage } from "./pages/CalendarPage";
 import { CustomMealsPage } from "./pages/CustomMealsPage";
 import { ExercisePage } from "./pages/ExercisePage";
 import { LoginPage } from "./pages/LoginPage";
 
-function AppRoutes() {
+function MainApp() {
   const { isConfigured, loading, session } = useAuth();
 
   if (isConfigured && loading) {
@@ -27,17 +28,15 @@ function AppRoutes() {
   return (
     <TrackerProvider>
       <TrackerReadyGate>
-        <BrowserRouter>
-          <Routes>
-            <Route element={<Layout />}>
-              <Route index element={<DashboardPage />} />
-              <Route path="calendar" element={<CalendarPage />} />
-              <Route path="meals" element={<CustomMealsPage />} />
-              <Route path="exercise" element={<ExercisePage />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route index element={<DashboardPage />} />
+            <Route path="calendar" element={<CalendarPage />} />
+            <Route path="meals" element={<CustomMealsPage />} />
+            <Route path="exercise" element={<ExercisePage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
       </TrackerReadyGate>
     </TrackerProvider>
   );
@@ -46,7 +45,12 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/auth/callback" element={<AuthCallbackPage />} />
+          <Route path="*" element={<MainApp />} />
+        </Routes>
+      </BrowserRouter>
     </AuthProvider>
   );
 }

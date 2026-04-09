@@ -79,10 +79,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!isConfigured) return { error: new Error("Supabase not configured") };
     try {
       const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const base = import.meta.env.BASE_URL || "/";
+      const callbackPath = base.endsWith("/") ? `${base}auth/callback` : `${base}/auth/callback`;
+      const emailRedirectTo = origin ? `${origin}${callbackPath}` : undefined;
       const { error } = await getSupabase().auth.signUp({
         email,
         password,
-        options: origin ? { emailRedirectTo: `${origin}/` } : undefined,
+        options: emailRedirectTo ? { emailRedirectTo } : undefined,
       });
       return { error: error ? normalizeAuthError(error) : null };
     } catch (e) {
