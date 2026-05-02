@@ -12,7 +12,6 @@ import { ExercisePage } from "./pages/ExercisePage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { WeightPage } from "./pages/WeightPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
-import { MicroPage } from "./pages/MicroPage";
 import { LoginPage } from "./pages/LoginPage";
 
 function MainApp() {
@@ -43,7 +42,6 @@ function MainApp() {
               <Route path="analytics" element={<AnalyticsPage />} />
               <Route path="weight" element={<WeightPage />} />
               <Route path="notifications" element={<NotificationsPage />} />
-              <Route path="micros" element={<MicroPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>

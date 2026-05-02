@@ -29,7 +29,6 @@ export function Layout() {
             </NavLink>
             <NavLink to="/analytics" className={linkClass}>Analytics</NavLink>
             <NavLink to="/weight" className={linkClass}>Weight</NavLink>
-            <NavLink to="/micros" className={linkClass}>Micros</NavLink>
             <NavLink to="/notifications" className={linkClass}>
               <span className="sm:hidden">🔔</span>
               <span className="hidden sm:inline">Notifications</span>
