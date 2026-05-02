@@ -45,6 +45,8 @@ export function DashboardPage() {
   const [goalsOpen, setGoalsOpen] = useState(true);
   const [breakdownKey, setBreakdownKey] = useState<keyof MacroTotals | null>(null);
   const [entriesListOpen, setEntriesListOpen] = useState(false);
+  const [showOtherDay, setShowOtherDay] = useState(false);
+  const [otherDay, setOtherDay] = useState(todayKey());
 
   const today = todayKey();
   const todayLabel = useMemo(
@@ -111,6 +113,26 @@ export function DashboardPage() {
     setSelectedMealId("");
     setServingMultiplier(1);
     setForm(emptyMacros());
+  };
+
+  const handleAddToOtherDay = async () => {
+    if (!hasAnyMacroValue(form) || !otherDay) return;
+    const baseName = mealName.trim() || "Meal";
+    const mealNameToStore =
+      selectedMealId && servingMultiplier !== 1
+        ? `${baseName} (${servingMultiplier}× serving)`
+        : baseName;
+    await addEntry({
+      date: otherDay,
+      mealName: mealNameToStore,
+      nutrition: { ...form },
+      customMealId: selectedMealId || undefined,
+    });
+    setMealName("");
+    setSelectedMealId("");
+    setServingMultiplier(1);
+    setForm(emptyMacros());
+    setShowOtherDay(false);
   };
 
   const mealHints = unrealisticMacroHints(form);
@@ -318,14 +340,53 @@ export function DashboardPage() {
             </ul>
           )}
 
-          <button
-            type="button"
-            onClick={handleAdd}
-            disabled={!hasAnyMacroValue(form)}
-            className="min-h-11 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white shadow hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-emerald-300"
-          >
-            Add to today&apos;s log
-          </button>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={handleAdd}
+              disabled={!hasAnyMacroValue(form)}
+              className="min-h-11 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white shadow hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-emerald-300"
+            >
+              Add to today&apos;s log
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowOtherDay((v) => !v)}
+              disabled={!hasAnyMacroValue(form)}
+              className="min-h-11 rounded-lg border border-slate-200 px-4 py-2.5 font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+            >
+              Add to another day
+            </button>
+            {showOtherDay && (
+              <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:col-span-2">
+                <label className="text-sm font-medium text-slate-600">Select date</label>
+                <input
+                  type="date"
+                  value={otherDay}
+                  max={todayKey()}
+                  onChange={(e) => setOtherDay(e.target.value)}
+                  className="min-h-11 w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-slate-900 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleAddToOtherDay()}
+                    disabled={!otherDay}
+                    className="min-h-11 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white shadow hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
+                  >
+                    Log for {otherDay}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowOtherDay(false)}
+                    className="min-h-11 rounded-lg border border-slate-200 px-4 py-2.5 font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </section>
 

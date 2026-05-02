@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react";
+import type { EmailOtpType } from "@supabase/supabase-js";
 import { Link, useNavigate } from "react-router-dom";
 import { getSupabase, isSupabaseConfigured } from "../lib/supabase";
+
+const OTP_TYPES = new Set<EmailOtpType>([
+  "signup",
+  "invite",
+  "magiclink",
+  "recovery",
+  "email_change",
+  "email",
+]);
 
 /**
  * Handles Supabase email confirmation (and similar) redirects.
@@ -26,9 +36,19 @@ export function AuthCallbackPage() {
     const verify = async () => {
       try {
         const url = new URL(window.location.href);
+        const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
         const code = url.searchParams.get("code");
+        const tokenHash = url.searchParams.get("token_hash") || hashParams.get("token_hash");
+        const rawType = url.searchParams.get("type") || hashParams.get("type");
+        const otpType: EmailOtpType | null = rawType && OTP_TYPES.has(rawType as EmailOtpType) ? (rawType as EmailOtpType) : null;
 
-        if (code) {
+        if (tokenHash && otpType) {
+          const { error: verifyError } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: otpType,
+          });
+          if (verifyError) throw verifyError;
+        } else if (code) {
           const { error: ex } = await supabase.auth.exchangeCodeForSession(window.location.href);
           if (ex) throw ex;
         }
@@ -61,7 +81,15 @@ export function AuthCallbackPage() {
         }
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Verification failed.");
+          const message = e instanceof Error ? e.message : "Verification failed.";
+          const normalized = message.toLowerCase();
+          if (normalized.includes("both auth code and code verifier should be non-empty")) {
+            setError(
+              "This verification link expects the same browser session used during signup. Try signing in directly (your email may already be confirmed), or request a fresh email link and open it in the same browser."
+            );
+            return;
+          }
+          setError(message);
         }
       }
     };

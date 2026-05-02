@@ -161,6 +161,8 @@ export function CustomMealsPage() {
     nutrition: emptyMacros(),
   });
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [showOtherDay, setShowOtherDay] = useState(false);
+  const [otherDay, setOtherDay] = useState(todayKey());
   const [backupMessage, setBackupMessage] = useState<string>("");
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -207,6 +209,18 @@ export function CustomMealsPage() {
       nutrition: { ...form.nutrition },
       customMealId: editingId ?? undefined,
     });
+  };
+
+  const handleAddToOtherDay = async () => {
+    const name = form.name.trim();
+    if (!name || !hasAnyMacroValue(form.nutrition) || !otherDay) return;
+    await addEntry({
+      date: otherDay,
+      mealName: name,
+      nutrition: { ...form.nutrition },
+      customMealId: editingId ?? undefined,
+    });
+    setShowOtherDay(false);
   };
 
   const runAiEstimate = useCallback(
@@ -456,6 +470,45 @@ export function CustomMealsPage() {
             >
               Add to today&apos;s track
             </button>
+            <button
+              type="button"
+              onClick={() => setShowOtherDay((v) => !v)}
+              disabled={!canSaveMeal}
+              className="min-h-11 rounded-lg border border-slate-200 px-4 py-2.5 font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400 sm:col-span-2"
+            >
+              Add to another day&apos;s track
+            </button>
+            {showOtherDay && (
+              <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:col-span-2">
+                <label className="text-sm font-medium text-slate-600">
+                  Select date
+                </label>
+                <input
+                  type="date"
+                  value={otherDay}
+                  max={todayKey()}
+                  onChange={(e) => setOtherDay(e.target.value)}
+                  className="min-h-11 w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-slate-900 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleAddToOtherDay()}
+                    disabled={!otherDay}
+                    className="min-h-11 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white shadow hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
+                  >
+                    Track for {otherDay}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowOtherDay(false)}
+                    className="min-h-11 rounded-lg border border-slate-200 px-4 py-2.5 font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
             {editingId && (
               <button
                 type="button"
