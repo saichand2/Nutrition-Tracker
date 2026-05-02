@@ -265,6 +265,7 @@ export function ExercisePage() {
               const active = key === selectedDate;
               const isToday = key === today;
               const groups = groupsByDate.get(key) ?? [];
+              const hasLogs = groups.length > 0;
               const groupsLabel =
                 groups.length <= 2
                   ? groups.map((g) => EXERCISE_GROUP_LABELS[g]).join(", ")
@@ -279,7 +280,9 @@ export function ExercisePage() {
                   className={`rounded-lg border px-1.5 py-2 text-center text-xs transition sm:px-1 ${
                     active
                       ? "border-emerald-400 bg-emerald-100 text-emerald-900"
-                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      : hasLogs
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                   }`}
                 >
                   <span className="block uppercase">{format(d, "EEE")}</span>

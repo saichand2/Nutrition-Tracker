@@ -21,15 +21,18 @@ export function Layout() {
               <span className="sm:hidden">Home</span>
               <span className="hidden sm:inline">Dashboard</span>
             </NavLink>
-            <NavLink to="/calendar" className={linkClass}>
-              Calendar
-            </NavLink>
-            <NavLink to="/exercise" className={linkClass}>
-              Exercise
-            </NavLink>
+            <NavLink to="/calendar" className={linkClass}>Calendar</NavLink>
+            <NavLink to="/exercise" className={linkClass}>Exercise</NavLink>
             <NavLink to="/meals" className={linkClass}>
               <span className="sm:hidden">Meals</span>
               <span className="hidden sm:inline">Custom meals</span>
+            </NavLink>
+            <NavLink to="/analytics" className={linkClass}>Analytics</NavLink>
+            <NavLink to="/weight" className={linkClass}>Weight</NavLink>
+            <NavLink to="/micros" className={linkClass}>Micros</NavLink>
+            <NavLink to="/notifications" className={linkClass}>
+              <span className="sm:hidden">🔔</span>
+              <span className="hidden sm:inline">Notifications</span>
             </NavLink>
             {isConfigured && (
               <button

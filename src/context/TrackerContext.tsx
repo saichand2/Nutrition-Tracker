@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { BackupData, CustomMeal, ExerciseLogEntry, LogEntry, MacroTotals, NutritionGoals } from "../types";
+import type { BackupData, CustomMeal, ExerciseLogEntry, LogEntry, MacroTotals, MealPeriodTag, NutritionGoals } from "../types";
 import { createId } from "../lib/id";
 import {
   loadCustomMeals,
@@ -46,8 +46,9 @@ type TrackerContextValue = {
     mealName: string;
     nutrition: MacroTotals;
     customMealId?: string;
+    mealPeriod?: MealPeriodTag;
   }) => Promise<void>;
-  updateEntry: (id: string, patch: Partial<Pick<LogEntry, "mealName" | "nutrition">>) => Promise<void>;
+  updateEntry: (id: string, patch: Partial<Pick<LogEntry, "mealName" | "nutrition" | "mealPeriod">>) => Promise<void>;
   deleteEntry: (id: string) => Promise<void>;
   addCustomMeal: (meal: Omit<CustomMeal, "id">) => Promise<void>;
   updateCustomMeal: (id: string, patch: Partial<Omit<CustomMeal, "id">>) => Promise<void>;
@@ -129,6 +130,7 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
       mealName: string;
       nutrition: MacroTotals;
       customMealId?: string;
+      mealPeriod?: MealPeriodTag;
     }) => {
       const entry: LogEntry = {
         id: createId(),
@@ -136,6 +138,7 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
         mealName: input.mealName.trim() || "Meal",
         nutrition: { ...input.nutrition },
         customMealId: input.customMealId,
+        mealPeriod: input.mealPeriod,
       };
       const next = [...entries, entry];
       setEntries(next);
@@ -149,7 +152,7 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
   );
 
   const updateEntry = useCallback(
-    async (id: string, patch: Partial<Pick<LogEntry, "mealName" | "nutrition">>) => {
+    async (id: string, patch: Partial<Pick<LogEntry, "mealName" | "nutrition" | "mealPeriod">>) => {
       const next = entries.map((e) =>
         e.id === id
           ? {
@@ -162,7 +165,7 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
       const updated = next.find((e) => e.id === id);
       setEntries(next);
       if (cloud && updated) {
-        await updateLogEntryCloud(userId!, id, { mealName: updated.mealName, nutrition: updated.nutrition });
+        await updateLogEntryCloud(userId!, id, { mealName: updated.mealName, nutrition: updated.nutrition, mealPeriod: updated.mealPeriod });
       } else if (!cloud) {
         saveEntries(next);
       }
