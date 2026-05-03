@@ -1,4 +1,4 @@
-import type { CustomMeal, ExerciseLogEntry, ExerciseGroupId, LogEntry, NutritionGoals } from "../types";
+import type { CustomMeal, ExerciseLogEntry, ExerciseGroupId, LogEntry, MealPeriodTag, NutritionGoals } from "../types";
 import { defaultGoals } from "../types";
 import { getSupabase } from "./supabase";
 
@@ -21,6 +21,7 @@ function rowToEntry(r: Record<string, unknown>): LogEntry {
       fiber: n(r.fiber),
     },
     customMealId: r.custom_meal_id ? String(r.custom_meal_id) : undefined,
+    mealPeriod: r.meal_period ? (r.meal_period as MealPeriodTag) : undefined,
   };
 }
 
@@ -127,6 +128,7 @@ export async function insertLogEntryCloud(userId: string, e: LogEntry): Promise<
     fat: e.nutrition.fat,
     fiber: e.nutrition.fiber,
     custom_meal_id: e.customMealId ?? null,
+    meal_period: e.mealPeriod ?? null,
   });
   if (error) throw error;
 }
@@ -134,11 +136,12 @@ export async function insertLogEntryCloud(userId: string, e: LogEntry): Promise<
 export async function updateLogEntryCloud(
   userId: string,
   id: string,
-  patch: Partial<Pick<LogEntry, "mealName" | "nutrition">>
+  patch: Partial<Pick<LogEntry, "mealName" | "nutrition" | "mealPeriod">>
 ): Promise<void> {
   const supabase = getSupabase();
   const row: Record<string, unknown> = {};
   if (patch.mealName !== undefined) row.meal_name = patch.mealName;
+  if (patch.mealPeriod !== undefined) row.meal_period = patch.mealPeriod;
   if (patch.nutrition) {
     const n0 = patch.nutrition;
     if (n0.calories !== undefined) row.calories = n0.calories;
@@ -245,6 +248,7 @@ export async function replaceAllUserDataCloud(
         fat: e.nutrition.fat,
         fiber: e.nutrition.fiber,
         custom_meal_id: e.customMealId ?? null,
+        meal_period: e.mealPeriod ?? null,
       }))
     );
     if (error) throw error;

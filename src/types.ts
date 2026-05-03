@@ -6,12 +6,15 @@ export type MacroTotals = {
   fiber: number;
 };
 
+export type MealPeriodTag = "breakfast" | "lunch" | "dinner" | "snack";
+
 export type LogEntry = {
   id: string;
   date: string;
   mealName: string;
   nutrition: MacroTotals;
   customMealId?: string;
+  mealPeriod?: MealPeriodTag;
 };
 
 export type CustomMeal = {
@@ -29,6 +32,23 @@ export type BackupData = {
   goals: NutritionGoals;
 };
 
+export type WeightLog = {
+  id: string;
+  date: string;
+  weightKg: number;
+  note?: string;
+};
+
+export type PushReminderConfig = {
+  breakfast: boolean;
+  breakfastTime: string;
+  lunch: boolean;
+  lunchTime: string;
+  dinner: boolean;
+  dinnerTime: string;
+  timezone: string;
+};
+
 export const emptyMacros = (): MacroTotals => ({
   calories: 0,
   protein: 0,
@@ -43,6 +63,16 @@ export const defaultGoals = (): NutritionGoals => ({
   carbs: 200,
   fat: 65,
   fiber: 30,
+});
+
+export const defaultPushConfig = (): PushReminderConfig => ({
+  breakfast: false,
+  breakfastTime: "08:00",
+  lunch: false,
+  lunchTime: "12:30",
+  dinner: false,
+  dinnerTime: "19:00",
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
 });
 
 export type ExerciseGroupId = "push" | "pull" | "legs";
