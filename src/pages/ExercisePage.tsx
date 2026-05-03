@@ -108,7 +108,12 @@ function WeightProgressionChart({ points }: { points: import("../lib/exercise-an
   const maxW = Math.max(...weights);
   const range = maxW - minW || 1;
 
-  const px = (i: number) => PAD_L + (i / (points.length - 1 || 1)) * chartW;
+  // Time-scale X positions by actual date
+  const dateMs = points.map((p) => new Date(p.date).getTime());
+  const minMs = dateMs[0]!;
+  const maxMs = dateMs[dateMs.length - 1]!;
+  const msRange = maxMs - minMs || 1;
+  const px = (i: number) => PAD_L + ((dateMs[i]! - minMs) / msRange) * chartW;
   const py = (w: number) => PAD_T + chartH - ((w - minW) / range) * chartH;
 
   const polyline = points.map((p, i) => `${px(i)},${py(p.weight)}`).join(" ");
@@ -116,14 +121,17 @@ function WeightProgressionChart({ points }: { points: import("../lib/exercise-an
   const tickCount = 4;
   const yTicks = Array.from({ length: tickCount }, (_, i) => minW + (range / (tickCount - 1)) * i);
 
-  // X-axis: show first, middle, last labels
-  const xLabels = points.length <= 6
-    ? points.map((p, i) => ({ i, label: p.label }))
-    : [
-        { i: 0, label: points[0]!.label },
-        { i: Math.floor((points.length - 1) / 2), label: points[Math.floor((points.length - 1) / 2)]!.label },
-        { i: points.length - 1, label: points[points.length - 1]!.label },
-      ];
+  // X labels: all logged dates; collapse overlapping ones when dense
+  const minGapPx = 28;
+  const xLabels: { i: number; label: string }[] = [];
+  let lastLabelX = -Infinity;
+  for (let i = 0; i < points.length; i++) {
+    const x = px(i);
+    if (x - lastLabelX >= minGapPx) {
+      xLabels.push({ i, label: points[i]!.label });
+      lastLabelX = x;
+    }
+  }
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" aria-label="Weight progression chart">
