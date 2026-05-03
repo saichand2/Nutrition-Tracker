@@ -14,8 +14,18 @@ const { publicKey, privateKey } = await webcrypto.subtle.generateKey(
 const pubRaw = await webcrypto.subtle.exportKey("raw", publicKey);
 const privPkcs8 = await webcrypto.subtle.exportKey("pkcs8", privateKey);
 
-// Extract the raw 32-byte private key from the PKCS#8 wrapper (last 32 bytes)
-const privRaw = new Uint8Array(privPkcs8).slice(-32);
+// Find the 32-byte private scalar inside the PKCS#8 DER structure.
+// It is the first OCTET STRING of exactly 32 bytes (tag 0x04, length 0x20).
+const pkcs8Bytes = new Uint8Array(privPkcs8);
+let privOffset = -1;
+for (let i = 0; i < pkcs8Bytes.length - 33; i++) {
+  if (pkcs8Bytes[i] === 0x04 && pkcs8Bytes[i + 1] === 0x20) {
+    privOffset = i + 2;
+    break;
+  }
+}
+if (privOffset === -1) throw new Error("Could not locate private key bytes in PKCS#8 structure");
+const privRaw = pkcs8Bytes.slice(privOffset, privOffset + 32);
 
 const toBase64Url = (buf) =>
   Buffer.from(buf).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
