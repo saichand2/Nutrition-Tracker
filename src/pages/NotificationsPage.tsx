@@ -31,7 +31,12 @@ export function NotificationsPage() {
   );
   const [subscribed, setSubscribed] = useState(false);
   const [config, setConfig] = useState<PushReminderConfig>(defaultPushConfig());
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  const notify = (msg: string, ok = true) => {
+    setStatus({ msg, ok });
+    setTimeout(() => setStatus(null), 4000);
+  };
 
   useEffect(() => {
     (async () => {
@@ -52,17 +57,19 @@ export function NotificationsPage() {
   }, [cloud, user]);
 
   const handleEnable = async () => {
-    setStatus("Registering…");
+    notify("Registering…");
     const reg = await registerServiceWorker();
-    if (!reg) { setStatus("Service worker not supported in this browser."); return; }
+    if (!reg) { notify("Service worker not supported in this browser.", false); return; }
     const sub = await requestPushPermission(reg);
     setPermission(Notification.permission);
-    if (!sub) { setStatus("Permission denied or VAPID key missing. Add VITE_VAPID_PUBLIC_KEY to .env."); return; }
+    if (!sub) { notify("Permission denied or VAPID key missing. Add VITE_VAPID_PUBLIC_KEY to .env.", false); return; }
     setSubscribed(true);
+    const configWithTz = { ...config, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone };
+    setConfig(configWithTz);
     if (cloud) {
-      await upsertPushSubscription(user!.id, sub, config);
+      await upsertPushSubscription(user!.id, sub, configWithTz);
     }
-    setStatus("Push notifications enabled!");
+    notify("Push notifications enabled!");
   };
 
   const handleDisable = async () => {
@@ -70,19 +77,20 @@ export function NotificationsPage() {
     if (reg) await unsubscribeFromPush(reg);
     setSubscribed(false);
     if (cloud) await deletePushSubscription(user!.id);
-    setStatus("Push notifications disabled.");
+    notify("Push notifications disabled.", false);
   };
 
   const handleSaveConfig = async (next: PushReminderConfig) => {
-    setConfig(next);
+    const withTz = { ...next, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone };
+    setConfig(withTz);
     if (cloud) {
       const reg = await navigator.serviceWorker.getRegistration();
       const sub = reg ? await reg.pushManager.getSubscription() : null;
-      if (sub) await upsertPushSubscription(user!.id, sub, next);
+      if (sub) await upsertPushSubscription(user!.id, sub, withTz);
     } else {
-      savePushConfigLocal(next);
+      savePushConfigLocal(withTz);
     }
-    setStatus("Reminders saved.");
+    notify("Reminders saved.");
   };
 
   const supported = "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
@@ -117,10 +125,13 @@ export function NotificationsPage() {
                 Disable push notifications
               </button>
             )}
-            {status && <p className="text-sm text-slate-600">{status}</p>}
+            {status && (
+              <p className={`text-sm ${status.ok ? "text-emerald-700" : "text-amber-700"}`}>{status.msg}</p>
+            )}
             <p className="text-xs text-slate-400">
-              Note: delivering push notifications requires a server-side job with your VAPID private key.
-              The subscription is saved — connect a Supabase Edge Function or cron to send reminders.
+              Delivery requires the <code className="font-mono">send-reminders</code> Supabase Edge Function
+              and VAPID keys. See <code className="font-mono">.env.example</code> and
+              <code className="font-mono"> supabase/functions/send-reminders/</code> in the repo.
             </p>
           </div>
         )}
@@ -129,7 +140,10 @@ export function NotificationsPage() {
       {/* Reminder config */}
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
         <h2 className="text-lg font-semibold text-slate-900">Meal reminders</h2>
-        <p className="mt-1 text-sm text-slate-600">Choose which meals to be reminded about and at what time.</p>
+        <p className="mt-1 text-sm text-slate-600">
+          Choose which meals to be reminded about and at what time.{" "}
+          <span className="text-slate-400">Times are in your local timezone ({Intl.DateTimeFormat().resolvedOptions().timeZone}).</span>
+        </p>
         <div className="mt-4 space-y-4">
           {REMINDER_FIELDS.map(({ key, label, timeKey }) => (
             <div key={key} className="flex flex-wrap items-center gap-4">

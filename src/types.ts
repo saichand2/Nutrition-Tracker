@@ -46,6 +46,7 @@ export type PushReminderConfig = {
   lunchTime: string;
   dinner: boolean;
   dinnerTime: string;
+  timezone: string;
 };
 
 export const emptyMacros = (): MacroTotals => ({
@@ -71,6 +72,7 @@ export const defaultPushConfig = (): PushReminderConfig => ({
   lunchTime: "12:30",
   dinner: false,
   dinnerTime: "19:00",
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
 });
 
 export type ExerciseGroupId = "push" | "pull" | "legs";
