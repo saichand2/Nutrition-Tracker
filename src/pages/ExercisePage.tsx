@@ -3,12 +3,159 @@ import { EXERCISE_GROUP_IDS, EXERCISE_GROUP_LABELS, EXERCISES_BY_GROUP } from ".
 import { eachDayOfInterval, endOfWeek, format, parseDateKey, startOfWeek, toDateKey, todayKey } from "../lib/dates";
 import { useTracker } from "../context/TrackerContext";
 import type { ExerciseGroupId } from "../types";
+import {
+  suggestNextGroup,
+  buildWeeklyFrequency,
+  buildWeightProgression,
+  exercisesWithWeightData,
+} from "../lib/exercise-analytics";
 
 const inputClass =
   "mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500";
 
 const labelClass = "block text-xs font-medium text-slate-600";
 
+const GROUP_COLORS: Record<ExerciseGroupId, { bar: string; text: string; bg: string; border: string }> = {
+  push: { bar: "#10b981", text: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-300" },
+  pull: { bar: "#8b5cf6", text: "text-violet-700", bg: "bg-violet-50", border: "border-violet-300" },
+  legs: { bar: "#f59e0b", text: "text-amber-700", bg: "bg-amber-50", border: "border-amber-300" },
+};
+
+// ─── Weekly Frequency Chart ───────────────────────────────────────────────────
+function WeeklyFrequencyChart({ logs }: { logs: import("../types").ExerciseLogEntry[] }) {
+  const data = useMemo(() => buildWeeklyFrequency(logs, 8), [logs]);
+  const maxVal = Math.max(...data.flatMap((d) => [d.push, d.pull, d.legs]), 1);
+
+  const W = 340, H = 130, PAD_L = 20, PAD_B = 22, PAD_T = 8;
+  const chartW = W - PAD_L - 4;
+  const chartH = H - PAD_B - PAD_T;
+  const groupW = chartW / data.length;
+  const barW = Math.max(4, Math.floor(groupW / 4));
+
+  const barX = (weekIdx: number, barIdx: number) =>
+    PAD_L + weekIdx * groupW + (groupW - barW * 3) / 2 + barIdx * barW;
+
+  const barH = (val: number) => (val / maxVal) * chartH;
+  const barY = (val: number) => PAD_T + chartH - barH(val);
+
+  const groups: ExerciseGroupId[] = ["push", "pull", "legs"];
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" aria-label="Weekly workout frequency">
+      {/* Y-axis ticks */}
+      {[0, 1, 2, 3].map((tick) => {
+        const v = Math.round((tick / 3) * maxVal);
+        const y = PAD_T + chartH - (v / maxVal) * chartH;
+        return (
+          <g key={tick}>
+            <line x1={PAD_L - 2} y1={y} x2={W - 4} y2={y} stroke="#e2e8f0" strokeWidth="1" />
+            <text x={PAD_L - 4} y={y + 3} textAnchor="end" fontSize="7" fill="#94a3b8">{v}</text>
+          </g>
+        );
+      })}
+
+      {/* Bars */}
+      {data.map((pt, wi) =>
+        groups.map((g, bi) => {
+          const val = pt[g];
+          const x = barX(wi, bi);
+          const h = barH(val);
+          const y = barY(val);
+          return (
+            <rect
+              key={`${wi}-${g}`}
+              x={x}
+              y={val === 0 ? barY(0) - 1 : y}
+              width={barW - 1}
+              height={val === 0 ? 1 : h}
+              fill={val === 0 ? "#e2e8f0" : GROUP_COLORS[g].bar}
+              rx="1"
+              opacity={val === 0 ? 0.4 : 1}
+            />
+          );
+        })
+      )}
+
+      {/* X-axis labels */}
+      {data.map((pt, wi) => (
+        <text
+          key={wi}
+          x={PAD_L + wi * groupW + groupW / 2}
+          y={H - 6}
+          textAnchor="middle"
+          fontSize="7"
+          fill="#94a3b8"
+        >
+          {pt.weekLabel}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
+// ─── Weight Progression Chart ─────────────────────────────────────────────────
+function WeightProgressionChart({ points }: { points: import("../lib/exercise-analytics").WeightPoint[] }) {
+  if (points.length === 0) {
+    return <p className="py-6 text-center text-xs text-slate-500">No weight data for this exercise yet.</p>;
+  }
+
+  const W = 340, H = 130, PAD_L = 30, PAD_B = 22, PAD_T = 8;
+  const chartW = W - PAD_L - 4;
+  const chartH = H - PAD_B - PAD_T;
+
+  const weights = points.map((p) => p.weight);
+  const minW = Math.min(...weights);
+  const maxW = Math.max(...weights);
+  const range = maxW - minW || 1;
+
+  const px = (i: number) => PAD_L + (i / (points.length - 1 || 1)) * chartW;
+  const py = (w: number) => PAD_T + chartH - ((w - minW) / range) * chartH;
+
+  const polyline = points.map((p, i) => `${px(i)},${py(p.weight)}`).join(" ");
+
+  const tickCount = 4;
+  const yTicks = Array.from({ length: tickCount }, (_, i) => minW + (range / (tickCount - 1)) * i);
+
+  // X-axis: show first, middle, last labels
+  const xLabels = points.length <= 6
+    ? points.map((p, i) => ({ i, label: p.label }))
+    : [
+        { i: 0, label: points[0]!.label },
+        { i: Math.floor((points.length - 1) / 2), label: points[Math.floor((points.length - 1) / 2)]!.label },
+        { i: points.length - 1, label: points[points.length - 1]!.label },
+      ];
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" aria-label="Weight progression chart">
+      {/* Y gridlines */}
+      {yTicks.map((v, i) => (
+        <g key={i}>
+          <line x1={PAD_L} y1={py(v)} x2={W - 4} y2={py(v)} stroke="#e2e8f0" strokeWidth="1" />
+          <text x={PAD_L - 4} y={py(v) + 3} textAnchor="end" fontSize="7" fill="#94a3b8">
+            {Math.round(v)}
+          </text>
+        </g>
+      ))}
+
+      {/* Line */}
+      <polyline points={polyline} fill="none" stroke="#10b981" strokeWidth="2" strokeLinejoin="round" />
+
+      {/* Dots */}
+      {points.map((p, i) => (
+        <circle key={i} cx={px(i)} cy={py(p.weight)} r="2.5" fill="#10b981" />
+      ))}
+
+      {/* X labels */}
+      {xLabels.map(({ i, label }) => (
+        <text key={i} x={px(i)} y={H - 6} textAnchor="middle" fontSize="7" fill="#94a3b8">
+          {label}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export function ExercisePage() {
   const { exerciseLogs: logs, addExerciseLog, deleteExerciseLog } = useTracker();
   const [groupId, setGroupId] = useState<ExerciseGroupId>("push");
@@ -17,6 +164,8 @@ export function ExercisePage() {
   const [formError, setFormError] = useState<string | null>(null);
   const today = todayKey();
   const [selectedDate, setSelectedDate] = useState(today);
+  const [analyticsOpen, setAnalyticsOpen] = useState(true);
+  const [weightExercise, setWeightExercise] = useState<string>("");
 
   const exerciseOptions = EXERCISES_BY_GROUP[groupId];
 
@@ -38,6 +187,7 @@ export function ExercisePage() {
     const end = endOfWeek(selected, { weekStartsOn: 0 });
     return eachDayOfInterval({ start, end });
   }, [selectedDate]);
+
   const weekLabel = useMemo(
     () => `${format(weekDays[0]!, "MMM d")} - ${format(weekDays[6]!, "MMM d, yyyy")}`,
     [weekDays]
@@ -47,17 +197,17 @@ export function ExercisePage() {
     () => logs.filter((l) => l.date === selectedDate),
     [logs, selectedDate]
   );
-  /** Three most recent logs for the selected group + exercise (newest first). */
+
   const recentSelectionLogs = useMemo(() => {
     return logs
       .filter((l) => l.groupId === groupId && l.exerciseName === exerciseName)
       .sort((a, b) => {
         const byDate = b.date.localeCompare(a.date);
-        if (byDate !== 0) return byDate;
-        return b.id.localeCompare(a.id);
+        return byDate !== 0 ? byDate : b.id.localeCompare(a.id);
       })
       .slice(0, 3);
   }, [logs, groupId, exerciseName]);
+
   const groupsByDate = useMemo(() => {
     const map = new Map<string, ExerciseGroupId[]>();
     for (const entry of logs) {
@@ -67,6 +217,15 @@ export function ExercisePage() {
     }
     return map;
   }, [logs]);
+
+  const suggestion = useMemo(() => suggestNextGroup(logs), [logs]);
+
+  const weightExercises = useMemo(() => exercisesWithWeightData(logs), [logs]);
+
+  const weightPoints = useMemo(
+    () => buildWeightProgression(logs, weightExercise),
+    [logs, weightExercise]
+  );
 
   const logSet = useCallback(async () => {
     setFormError(null);
@@ -87,12 +246,7 @@ export function ExercisePage() {
     const weightKg =
       isLegs ? parsed! : trimmed === "" || parsed === null || Number.isNaN(parsed) ? null : parsed;
 
-    await addExerciseLog({
-      date: today,
-      groupId,
-      exerciseName,
-      weightKg,
-    });
+    await addExerciseLog({ date: today, groupId, exerciseName, weightKg });
     if (isLegs) setWeightInput("");
   }, [weightInput, groupId, exerciseName, today, addExerciseLog]);
 
@@ -109,22 +263,43 @@ export function ExercisePage() {
 
   return (
     <div className="mx-auto max-w-4xl px-3 py-6 sm:px-4">
-      <header className="mb-6">
+      <header className="mb-4">
         <h1 className="text-xl font-semibold text-slate-900">Exercise</h1>
         <p className="mt-1 text-sm text-slate-600">
           Pick a group and lift, log weight (required for legs), and review past sets below.
         </p>
       </header>
 
+      {/* ── Next Workout Suggestion ── */}
+      {suggestion && (
+        <div
+          className={`mb-5 flex items-center justify-between gap-3 rounded-xl border px-4 py-3 ${GROUP_COLORS[suggestion.group].bg} ${GROUP_COLORS[suggestion.group].border}`}
+        >
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-slate-500">Suggested today</p>
+            <p className={`text-lg font-bold ${GROUP_COLORS[suggestion.group].text}`}>
+              {EXERCISE_GROUP_LABELS[suggestion.group]}
+            </p>
+            <p className="mt-0.5 text-xs text-slate-500">{suggestion.reason}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onGroupChange(suggestion.group)}
+            className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold ${GROUP_COLORS[suggestion.group].border} ${GROUP_COLORS[suggestion.group].text} hover:opacity-80`}
+          >
+            Select group →
+          </button>
+        </div>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-2">
+        {/* ── Log a set ── */}
         <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
           <h2 className="text-sm font-semibold text-slate-900">Log a set</h2>
           <div className="mt-4 space-y-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="min-w-0">
-                <label htmlFor="ex-group" className={labelClass}>
-                  Group
-                </label>
+                <label htmlFor="ex-group" className={labelClass}>Group</label>
                 <select
                   id="ex-group"
                   className={inputClass}
@@ -132,16 +307,12 @@ export function ExercisePage() {
                   onChange={(e) => onGroupChange(e.target.value as ExerciseGroupId)}
                 >
                   {EXERCISE_GROUP_IDS.map((id) => (
-                    <option key={id} value={id}>
-                      {EXERCISE_GROUP_LABELS[id]}
-                    </option>
+                    <option key={id} value={id}>{EXERCISE_GROUP_LABELS[id]}</option>
                   ))}
                 </select>
               </div>
               <div className="min-w-0">
-                <label htmlFor="ex-name" className={labelClass}>
-                  Exercise
-                </label>
+                <label htmlFor="ex-name" className={labelClass}>Exercise</label>
                 <select
                   id="ex-name"
                   className={inputClass}
@@ -149,9 +320,7 @@ export function ExercisePage() {
                   onChange={(e) => onExerciseChange(e.target.value)}
                 >
                   {exerciseOptions.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
+                    <option key={name} value={name}>{name}</option>
                   ))}
                 </select>
               </div>
@@ -174,10 +343,7 @@ export function ExercisePage() {
                 className={inputClass}
                 placeholder={groupId === "legs" ? "e.g. 135" : "Optional"}
                 value={weightInput}
-                onChange={(e) => {
-                  setWeightInput(e.target.value);
-                  setFormError(null);
-                }}
+                onChange={(e) => { setWeightInput(e.target.value); setFormError(null); }}
               />
             </div>
             {formError && <p className="text-sm text-red-600">{formError}</p>}
@@ -220,6 +386,7 @@ export function ExercisePage() {
           </div>
         </section>
 
+        {/* ── Past log ── */}
         <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
           <h2 className="text-sm font-semibold text-slate-900">Past log</h2>
           <p className="mt-1 text-xs text-slate-500">
@@ -259,6 +426,7 @@ export function ExercisePage() {
               Next week
             </button>
           </div>
+
           <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-7 sm:gap-1">
             {weekDays.map((d) => {
               const key = toDateKey(d);
@@ -269,9 +437,7 @@ export function ExercisePage() {
               const groupsLabel =
                 groups.length <= 2
                   ? groups.map((g) => EXERCISE_GROUP_LABELS[g]).join(", ")
-                  : `${EXERCISE_GROUP_LABELS[groups[0]!]}, ${EXERCISE_GROUP_LABELS[groups[1]!]} +${
-                      groups.length - 2
-                    }`;
+                  : `${EXERCISE_GROUP_LABELS[groups[0]!]}, ${EXERCISE_GROUP_LABELS[groups[1]!]} +${groups.length - 2}`;
               return (
                 <button
                   key={key}
@@ -305,12 +471,12 @@ export function ExercisePage() {
               {logsForSelectedDay.map((row) => (
                 <li key={row.id} className="rounded-md border border-slate-100 bg-white px-3 py-2 text-sm">
                   <div className="flex items-baseline justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-slate-800">{row.exerciseName}</p>
-                    <p className="text-xs text-slate-500">
-                      {EXERCISE_GROUP_LABELS[row.groupId]} · {format(parseDateKey(row.date), "EEE, MMM d, yyyy")}
-                    </p>
-                  </div>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-slate-800">{row.exerciseName}</p>
+                      <p className="text-xs text-slate-500">
+                        {EXERCISE_GROUP_LABELS[row.groupId]} · {format(parseDateKey(row.date), "EEE, MMM d, yyyy")}
+                      </p>
+                    </div>
                     <span className="shrink-0 font-medium tabular-nums text-slate-900">
                       {row.weightKg != null ? `${row.weightKg} lbs` : "—"}
                     </span>
@@ -330,6 +496,87 @@ export function ExercisePage() {
           )}
         </section>
       </div>
+
+      {/* ── Exercise Analytics ── */}
+      <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
+        <button
+          type="button"
+          onClick={() => setAnalyticsOpen((o) => !o)}
+          className="flex w-full items-center justify-between text-left"
+        >
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">Exercise analytics</h2>
+            <p className="mt-0.5 text-xs text-slate-500">Weekly volume by group and weight progression over time.</p>
+          </div>
+          <svg
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className={`h-4 w-4 text-slate-400 transition-transform ${analyticsOpen ? "rotate-180" : ""}`}
+          >
+            <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+          </svg>
+        </button>
+
+        {analyticsOpen && (
+          <div className="mt-4 grid gap-6 lg:grid-cols-2">
+            {/* Weekly frequency */}
+            <div>
+              <p className="mb-2 text-xs font-semibold text-slate-700">Weekly workout frequency</p>
+              {/* Legend */}
+              <div className="mb-2 flex gap-3">
+                {(["push", "pull", "legs"] as ExerciseGroupId[]).map((g) => (
+                  <span key={g} className="flex items-center gap-1 text-[10px] text-slate-600">
+                    <span className="inline-block h-2 w-2 rounded-sm" style={{ background: GROUP_COLORS[g].bar }} />
+                    {EXERCISE_GROUP_LABELS[g]}
+                  </span>
+                ))}
+              </div>
+              <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
+                {logs.length === 0 ? (
+                  <p className="py-6 text-center text-xs text-slate-500">Log exercises to see weekly trends.</p>
+                ) : (
+                  <WeeklyFrequencyChart logs={logs} />
+                )}
+              </div>
+              <p className="mt-1 text-[10px] text-slate-400">Bars = sessions per week per group (Mon–Sun)</p>
+            </div>
+
+            {/* Weight progression */}
+            <div>
+              <p className="mb-2 text-xs font-semibold text-slate-700">Weight progression</p>
+              <label className="block text-xs font-medium text-slate-600">
+                Exercise
+                <select
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  value={weightExercise}
+                  onChange={(e) => setWeightExercise(e.target.value)}
+                >
+                  <option value="">— Pick an exercise —</option>
+                  {weightExercises.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 p-2">
+                {!weightExercise ? (
+                  <p className="py-6 text-center text-xs text-slate-500">Select an exercise to see weight over time.</p>
+                ) : (
+                  <WeightProgressionChart points={weightPoints} />
+                )}
+              </div>
+              {weightPoints.length > 1 && (
+                <p className="mt-1 text-[10px] text-slate-400">
+                  {weightPoints[0]!.weight} → {weightPoints[weightPoints.length - 1]!.weight} lbs ·{" "}
+                  <span className={weightPoints[weightPoints.length - 1]!.weight >= weightPoints[0]!.weight ? "text-emerald-600" : "text-rose-600"}>
+                    {weightPoints[weightPoints.length - 1]!.weight >= weightPoints[0]!.weight ? "+" : ""}
+                    {(weightPoints[weightPoints.length - 1]!.weight - weightPoints[0]!.weight).toFixed(1)} lbs total
+                  </span>
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
