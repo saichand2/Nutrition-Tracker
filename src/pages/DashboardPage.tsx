@@ -102,14 +102,20 @@ export function DashboardPage() {
 
   const handleAdd = async () => {
     if (!hasAnyMacroValue(form)) return;
-    await addEntry({ date: today, mealName: buildMealName(), nutrition: { ...form }, customMealId: selectedMealId || undefined, mealPeriod: mealPeriod || undefined });
-    resetAddForm();
+    try {
+      await addEntry({ date: today, mealName: buildMealName(), nutrition: { ...form }, customMealId: selectedMealId || undefined, mealPeriod: mealPeriod || undefined });
+    } finally {
+      resetAddForm();
+    }
   };
 
   const handleAddToOtherDay = async () => {
     if (!hasAnyMacroValue(form) || !otherDay) return;
-    await addEntry({ date: otherDay, mealName: buildMealName(), nutrition: { ...form }, customMealId: selectedMealId || undefined, mealPeriod: mealPeriod || undefined });
-    resetAddForm();
+    try {
+      await addEntry({ date: otherDay, mealName: buildMealName(), nutrition: { ...form }, customMealId: selectedMealId || undefined, mealPeriod: mealPeriod || undefined });
+    } finally {
+      resetAddForm();
+    }
   };
 
   const prefillFromEntry = useCallback((e: LogEntry) => {
