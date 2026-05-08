@@ -74,7 +74,7 @@ type Range = 7 | 30 | 90;
 
 export function AnalyticsPage() {
   const { entries, goals } = useTracker();
-  const [range, setRange] = useState<Range>(30);
+  const [range, setRange] = useState<Range>(7);
 
   const points = useMemo(() => buildDailyPoints(entries, range), [entries, range]);
   const avgPoints = useMemo(() => rollingAverage(points, 7), [points]);

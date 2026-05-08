@@ -8,8 +8,10 @@ export function suggestNextGroup(logs: ExerciseLogEntry[]): {
   group: ExerciseGroupId;
   reason: string;
 } | null {
+  const today = toDateKey(new Date());
   const dayGroups = new Map<string, Set<ExerciseGroupId>>();
   for (const log of logs) {
+    if (log.date === today) continue; // only use past days
     const s = dayGroups.get(log.date) ?? new Set<ExerciseGroupId>();
     s.add(log.groupId);
     dayGroups.set(log.date, s);
