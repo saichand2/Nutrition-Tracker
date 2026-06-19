@@ -3,3 +3,7 @@
 # Requires VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, and VAPID_SUBJECT
 # to be set in Supabase → Project Settings → Edge Functions → Secrets.
 schedule = "* * * * *"
+
+[functions.keep-alive]
+# Pings the database every 3 days to prevent free-tier auto-pause.
+schedule = "0 0 */3 * *"

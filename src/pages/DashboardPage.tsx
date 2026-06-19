@@ -3,6 +3,7 @@ import { useTracker } from "../context/TrackerContext";
 import { IntakeMacroGraphRow } from "../components/IntakeMacroGraphRow";
 import { MacroFields } from "../components/MacroFields";
 import { ProgressBar } from "../components/ProgressBar";
+import { TdeeCalculatorModal } from "../components/TdeeCalculatorModal";
 import { mealDisplayLabel } from "../lib/meal-display";
 import { formatRemainingToGoal, sumMacros } from "../lib/macros";
 import { format, parseDateKey, todayKey } from "../lib/dates";
@@ -47,6 +48,8 @@ export function DashboardPage() {
   const [entriesListOpen, setEntriesListOpen] = useState(false);
   const [showOtherDay, setShowOtherDay] = useState(false);
   const [otherDay, setOtherDay] = useState(todayKey());
+  const [isSaving, setIsSaving] = useState(false);
+  const [showTdee, setShowTdee] = useState(false);
 
   // Inline edit state
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
@@ -101,20 +104,24 @@ export function DashboardPage() {
   };
 
   const handleAdd = async () => {
-    if (!hasAnyMacroValue(form)) return;
+    if (!hasAnyMacroValue(form) || isSaving) return;
+    setIsSaving(true);
     try {
       await addEntry({ date: today, mealName: buildMealName(), nutrition: { ...form }, customMealId: selectedMealId || undefined, mealPeriod: mealPeriod || undefined });
     } finally {
       resetAddForm();
+      setIsSaving(false);
     }
   };
 
   const handleAddToOtherDay = async () => {
-    if (!hasAnyMacroValue(form) || !otherDay) return;
+    if (!hasAnyMacroValue(form) || !otherDay || isSaving) return;
+    setIsSaving(true);
     try {
       await addEntry({ date: otherDay, mealName: buildMealName(), nutrition: { ...form }, customMealId: selectedMealId || undefined, mealPeriod: mealPeriod || undefined });
     } finally {
       resetAddForm();
+      setIsSaving(false);
     }
   };
 
@@ -355,10 +362,10 @@ export function DashboardPage() {
           )}
 
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <button type="button" onClick={() => void handleAdd()} disabled={!canAdd} className="min-h-11 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white shadow hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-emerald-300">
-              Add to today&apos;s log
+            <button type="button" onClick={() => void handleAdd()} disabled={!canAdd || isSaving} className="min-h-11 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white shadow hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-emerald-300">
+              {isSaving ? "Saving…" : "Add to today's log"}
             </button>
-            <button type="button" onClick={() => setShowOtherDay((v) => !v)} disabled={!canAdd} className="min-h-11 rounded-lg border border-slate-200 px-4 py-2.5 font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400">
+            <button type="button" onClick={() => setShowOtherDay((v) => !v)} disabled={!canAdd || isSaving} className="min-h-11 rounded-lg border border-slate-200 px-4 py-2.5 font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400">
               Add to another day
             </button>
             {showOtherDay && (
@@ -366,8 +373,8 @@ export function DashboardPage() {
                 <label className="text-sm font-medium text-slate-600">Select date</label>
                 <input type="date" value={otherDay} max={todayKey()} onChange={(e) => setOtherDay(e.target.value)} className="min-h-11 w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-slate-900 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => void handleAddToOtherDay()} disabled={!otherDay} className="min-h-11 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white shadow hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300">
-                    Log for {otherDay}
+                  <button type="button" onClick={() => void handleAddToOtherDay()} disabled={!otherDay || isSaving} className="min-h-11 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white shadow hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300">
+                    {isSaving ? "Saving…" : `Log for ${otherDay}`}
                   </button>
                   <button type="button" onClick={() => setShowOtherDay(false)} className="min-h-11 rounded-lg border border-slate-200 px-4 py-2.5 font-medium text-slate-700 hover:bg-slate-50">
                     Cancel
@@ -381,10 +388,19 @@ export function DashboardPage() {
 
       {/* Goals & progress */}
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-        <button type="button" onClick={() => setGoalsOpen((o) => !o)} className="flex w-full items-center justify-between text-left">
-          <h2 className="text-lg font-semibold text-slate-900">Goals &amp; progress</h2>
-          <span className="text-slate-400">{goalsOpen ? "▼" : "▶"}</span>
-        </button>
+        <div className="flex items-center justify-between gap-2">
+          <button type="button" onClick={() => setGoalsOpen((o) => !o)} className="flex flex-1 items-center justify-between text-left">
+            <h2 className="text-lg font-semibold text-slate-900">Goals &amp; progress</h2>
+            <span className="text-slate-400">{goalsOpen ? "▼" : "▶"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowTdee(true)}
+            className="shrink-0 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+          >
+            Calculate from profile
+          </button>
+        </div>
         <p className="mt-1 text-sm text-slate-600">Daily targets. Progress compares your logged totals for today against these goals.</p>
         {goalsOpen && (
           <>
@@ -403,6 +419,13 @@ export function DashboardPage() {
           </>
         )}
       </section>
+
+      {showTdee && (
+        <TdeeCalculatorModal
+          onApply={(g) => void setGoals(g)}
+          onClose={() => setShowTdee(false)}
+        />
+      )}
     </div>
   );
 }
